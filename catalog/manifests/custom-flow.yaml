@@ -7,7 +7,7 @@ metadata:
   worker_class: background
   description: 템플릿으로 표현할 수 없는 반복 · 조건 분기 · 코드형 확장의 예시
 model: {ref: models/default, temperature: 0.0, max_tokens: 4096}
-harness_preset: background-hitl
+harness_preset: standard
 skills: [skill://example/checklist@active, skill://example/record-update@active]
 prompts: {system: prompt://records/system@active}
 flow: {template: extension, extension: custom_flow}

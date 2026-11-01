@@ -62,3 +62,9 @@ def test_principal은_langgraph_auth_user에서만_온다() -> None:
     )
     assert ctx["principal"] == "real-user"
     assert build_run_context({"agent_id": "records-guide", "user_id": "spoofed"}, None)["principal"] == "anonymous"
+
+
+def test_run_context는_모델_별칭과_추가_미들웨어를_실어_나른다() -> None:
+    ctx = build_run_context({"agent_id": "records-guide", "model": "models/fake", "middleware": ["a", "b"]}, None)
+    assert ctx["model"] == "models/fake" and ctx["middleware"] == ["a", "b"]
+    assert build_run_context({"agent_id": "records-guide"}, None)["middleware"] == []

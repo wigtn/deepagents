@@ -13,12 +13,20 @@ from __future__ import annotations
 from typing import Any, NotRequired, Optional, TypedDict
 
 from deepagents import DeepAgentState
+from langgraph.graph.state import CompiledStateGraph
 
 SESSION_TYPES: tuple[str, ...] = ("production", "evaluation", "test")
 
+# A compiled graph of either lane; the state/context/input/output types vary per assembly.
+Graph = CompiledStateGraph[Any, Any, Any, Any]
+
 
 class RunContext(TypedDict, total=False):
-    """Flat per-run context. Keep it flat: wrapper keys are dropped whole."""
+    """Flat per-run context. Keep it flat: wrapper keys are dropped whole.
+
+    ``model`` switches the manifest's model alias for this run; ``middleware`` adds registered
+    extra middleware by name. Both select from what the image already has, they load nothing.
+    """
 
     agent_id: str
     principal: str
@@ -27,6 +35,8 @@ class RunContext(TypedDict, total=False):
     parent_run_id: Optional[str]
     entity: Optional[str]
     data_scope: list[str]
+    model: Optional[str]
+    middleware: list[str]
 
 
 class PlatformState(DeepAgentState):
@@ -46,6 +56,8 @@ def default_context(agent_id: str, **overrides: Any) -> RunContext:
         "parent_run_id": None,
         "entity": None,
         "data_scope": [],
+        "model": None,
+        "middleware": [],
     }
     ctx.update(overrides)  # type: ignore[typeddict-item]
     return ctx

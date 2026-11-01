@@ -9,7 +9,7 @@ from typing import Optional
 import yaml
 
 from wigtn_agents.assets.schema import Asset, AssetKind, AssetRef, AssetStatus, EvalCase
-from wigtn_agents.manifest import Manifest
+from wigtn_agents.manifest import ActionManifest, AnyManifest, Manifest
 
 
 class Catalog:
@@ -19,6 +19,7 @@ class Catalog:
         self._assets: dict[tuple[str, str, int], Asset] = {}
         self._active: dict[tuple[str, str], int] = {}
         self._manifests: dict[str, Manifest] = {}
+        self._actions: dict[str, ActionManifest] = {}
 
     @classmethod
     def load(cls, assets_dir: Path, manifests_dir: Optional[Path] = None) -> Catalog:
@@ -28,7 +29,12 @@ class Catalog:
             catalog.add(Asset.model_validate(yaml.safe_load(path.read_text(encoding="utf-8"))))
         if manifests_dir is not None:
             for path in sorted(manifests_dir.glob("*.yaml")):
-                catalog.add_manifest(Manifest.model_validate(yaml.safe_load(path.read_text(encoding="utf-8"))))
+                data = yaml.safe_load(path.read_text(encoding="utf-8"))
+                if data.get("kind") == "action":
+                    catalog.add_manifest(ActionManifest.model_validate(data))
+                else:
+                    catalog.add_manifest(Manifest.model_validate(data))
+        catalog.validate_links()
         return catalog
 
     def add(self, asset: Asset) -> None:
@@ -40,17 +46,47 @@ class Catalog:
         if asset.status == AssetStatus.ACTIVE:
             self._active[(asset.kind.value, asset.name)] = asset.version
 
-    def add_manifest(self, manifest: Manifest) -> None:
-        """매니페스트를 등록합니다."""
-        self._manifests[manifest.agent_id] = manifest
+    def add_manifest(self, manifest: AnyManifest) -> None:
+        """매니페스트를 등록합니다. 에이전트와 action은 이름 공간을 같이 씁니다."""
+        if manifest.agent_id in self._manifests or manifest.agent_id in self._actions:
+            raise ValueError(f"이미 등록된 이름입니다: {manifest.agent_id}")
+        if isinstance(manifest, ActionManifest):
+            self._actions[manifest.agent_id] = manifest
+        else:
+            self._manifests[manifest.agent_id] = manifest
 
     def manifest(self, agent_id: str) -> Manifest:
-        """agent_id로 매니페스트를 조회합니다."""
-        return self._manifests[agent_id]
+        """agent_id로 에이전트 매니페스트를 조회합니다."""
+        try:
+            return self._manifests[agent_id]
+        except KeyError as exc:
+            raise KeyError(f"등록되지 않은 에이전트입니다: {agent_id}") from exc
+
+    def action(self, action_id: str) -> ActionManifest:
+        """Action 매니페스트를 조회합니다."""
+        try:
+            return self._actions[action_id]
+        except KeyError as exc:
+            raise KeyError(f"등록되지 않은 action입니다: {action_id}") from exc
 
     def has_agent(self, agent_id: str) -> bool:
         """등록된 에이전트인지."""
         return agent_id in self._manifests
+
+    def agent_ids(self) -> list[str]:
+        """등록된 에이전트 이름."""
+        return sorted(self._manifests)
+
+    def action_ids(self) -> list[str]:
+        """등록된 action 이름."""
+        return sorted(self._actions)
+
+    def validate_links(self) -> None:
+        """서브에이전트 이름이 전부 등록된 에이전트인지 확인합니다(로드 시점에 실패)."""
+        for manifest in self._manifests.values():
+            missing = [name for name in manifest.subagents if name not in self._manifests]
+            if missing:
+                raise ValueError(f"{manifest.agent_id}: 등록되지 않은 서브에이전트 {missing}")
 
     def active_version(self, kind: str, name: str) -> int:
         """활성 버전 번호."""
@@ -96,7 +132,7 @@ class Catalog:
             collected.extend((asset.ref, case) for case in asset.eval_cases)
         return collected
 
-    def tools_for_manifest(self, manifest: Manifest) -> list[Asset]:
+    def tools_for_manifest(self, manifest: AnyManifest) -> list[Asset]:
         """매니페스트의 skill이 참조하는 tool 자산(고정 버전)."""
         tools: dict[str, Asset] = {}
         for skill_ref in manifest.skills:

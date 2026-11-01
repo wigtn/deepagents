@@ -6,7 +6,8 @@ reported. The run then ends with ``CostCapReachedError`` and the gap file gets o
 ``cost_cap`` line per day, so the time without runs is never read as a quiet stretch.
 
 Spend is kept per UTC day in a JSON file under a file lock, so several workers share it.
-A model without a known price is refused before any call (fail closed).
+Prices come from the model registry (``catalog/models.yaml``); an alias without a price is
+refused before any call (fail closed), see ``wigtn_agents.models``.
 """
 
 from __future__ import annotations
@@ -23,47 +24,27 @@ from uuid import UUID
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 
+from wigtn_agents.models import Price
+
 CAP_ENV = "WIGTN_AGENT_DAILY_COST_CAP_USD"
 LEDGER_ENV = "WIGTN_AGENT_COST_LEDGER"
 GAPS_ENV = "WIGTN_AGENT_GAP_LOG"
-PRICE_IN_ENV = "WIGTN_AGENT_PRICE_INPUT_PER_MTOK"
-PRICE_OUT_ENV = "WIGTN_AGENT_PRICE_OUTPUT_PER_MTOK"
 DEFAULT_CAP_USD: Final = 10.0
-# USD per million tokens (input, output), Anthropic first-party rates as of 2026-10.
-PRICES: Final[dict[str, tuple[float, float]]] = {
-    "claude-sonnet-4-6": (3.0, 15.0),
-    "claude-sonnet-5-5": (2.0, 10.0),
-    "claude-opus-5-5": (4.0, 20.0),
-    "claude-haiku-5-5": (0.10, 0.50),
-}
-CACHE_READ: Final = 0.1  # of the input price
-CACHE_WRITE: Final = 1.25  # of the input price
 
 
 class CostCapReachedError(RuntimeError):
     """The day's model spend reached the cap; no more model calls until the next UTC day."""
 
 
-def price_for(model_id: str) -> tuple[float, float]:
-    """(input, output) USD per million tokens; environment overrides win, unknown fails."""
-    if os.environ.get(PRICE_IN_ENV) and os.environ.get(PRICE_OUT_ENV):
-        return float(os.environ[PRICE_IN_ENV]), float(os.environ[PRICE_OUT_ENV])
-    name = model_id.split(":", 1)[-1]
-    if name not in PRICES:
-        raise LookupError(f"no price for {name}; set {PRICE_IN_ENV} and {PRICE_OUT_ENV}")
-    return PRICES[name]
-
-
-def cost_of(usage: dict[str, Any], prices: tuple[float, float]) -> float:
-    """USD for one call from LangChain ``usage_metadata``."""
-    price_in, price_out = prices
+def cost_of(usage: dict[str, Any], price: Price) -> float:
+    """USD for one call from LangChain ``usage_metadata`` and the registry price of the model."""
     details = usage.get("input_token_details") or {}
     read = int(details.get("cache_read") or 0)
     write = int(details.get("cache_creation") or 0)
     fresh = max(int(usage.get("input_tokens") or 0) - read - write, 0)
     output = int(usage.get("output_tokens") or 0)
-    dollars = fresh * price_in + read * price_in * CACHE_READ + write * price_in * CACHE_WRITE
-    return (dollars + output * price_out) / 1_000_000
+    dollars = fresh * price.input + read * price.cached_input_rate + write * price.cache_write_rate
+    return (dollars + output * price.output) / 1_000_000
 
 
 class DailyBudget:
@@ -144,9 +125,9 @@ class BudgetCallback(BaseCallbackHandler):
 
     raise_error = True  # an exception here stops the call instead of being logged
 
-    def __init__(self, budget: DailyBudget, prices: tuple[float, float]) -> None:
+    def __init__(self, budget: DailyBudget, price: Price) -> None:
         self._budget = budget
-        self._prices = prices
+        self._price = price
 
     def on_chat_model_start(self, serialized: dict[str, Any], messages: Any, *, run_id: UUID, **kwargs: Any) -> None:
         """Refuse the call when the spend of today reached the cap."""
@@ -160,4 +141,4 @@ class BudgetCallback(BaseCallbackHandler):
             for generation in generations:
                 usage = getattr(getattr(generation, "message", None), "usage_metadata", None)
                 if usage:
-                    self._budget.charge(cost_of(dict(usage), self._prices))
+                    self._budget.charge(cost_of(dict(usage), self._price))

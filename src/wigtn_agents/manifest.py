@@ -1,9 +1,19 @@
-"""매니페스트 스키마와 flow 판단표."""
+"""Manifest schemas (agent and action lanes) and the flow decision table.
+
+Two kinds share the catalog:
+
+* ``kind: agent`` — a conversational deep agent assembled per run (graph ``worker``).
+* ``kind: action`` — a fixed three-step run, gather → reason → writeback (graph ``action``).
+  Inputs are gathered by code, the model only reasons, and only code writes. How much the model
+  may explore is the ``level``: one structured call, a bounded ReAct loop over read tools, or a
+  scoped deep agent. Control flow is never configured in the manifest; an action that needs its
+  own flow is a code extension.
+"""
 
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Literal, Optional
+from typing import Any, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -37,12 +47,30 @@ class Metadata(BaseModel):
     description: str = ""
 
 
-class ModelSpec(BaseModel):
-    """모델 지정. LLM 게이트웨이 경유."""
+PRESETS: tuple[str, ...] = ("observe", "standard", "strict")
+Preset = Literal["observe", "standard", "strict"]
+ReasoningEffort = Literal["none", "low", "medium", "high", "xhigh", "max"]
+ActionLevel = Literal["structured", "bounded-react", "scoped-agent"]
 
-    ref: str
-    temperature: float = Field(default=0.1, ge=0.0, le=1.0)
-    max_tokens: int = Field(default=4096, ge=1)
+
+class ModelSpec(BaseModel):
+    """Model alias from ``catalog/models.yaml`` and the parameters asked of it.
+
+    A parameter the registry entry does not accept is dropped, not sent.
+    """
+
+    ref: str = "models/default"
+    temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
+    max_tokens: Optional[int] = Field(default=4096, ge=1)
+    reasoning_effort: Optional[ReasoningEffort] = None
+
+    def params(self) -> dict[str, Any]:
+        """Parameters handed to the model builder."""
+        return {
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+            "reasoning_effort": self.reasoning_effort,
+        }
 
 
 class Flow(BaseModel):
@@ -85,13 +113,16 @@ class Manifest(BaseModel):
     api_version: Literal["wigtn.agents/v1"] = Field(alias="apiVersion")
     kind: Literal["agent"]
     metadata: Metadata
-    model: ModelSpec
-    harness_preset: str
+    model: ModelSpec = Field(default_factory=ModelSpec)
+    harness_preset: Preset = "standard"
+    extra_middleware: list[str] = Field(default_factory=list)
     skills: list[str]
     prompts: dict[str, str]
     flow: Flow
     interrupts: Interrupts = Field(default_factory=Interrupts)
     permissions: Permissions
+    subagents: list[str] = Field(default_factory=list)
+    memory: bool = False
     extensions: list[str] = Field(default_factory=list)
     sel: SelConfig = Field(default_factory=SelConfig)
 
@@ -127,6 +158,8 @@ class Manifest(BaseModel):
                 raise ValueError(f"SEL이 고칠 수 없는 매니페스트 필드입니다: {path}")
         if self.flow.template == FlowTemplate.EXTENSION and self.flow.extension not in self.extensions:
             raise ValueError("flow.extension은 extensions 목록에 있어야 합니다")
+        if self.metadata.name in self.subagents:
+            raise ValueError("자기 자신을 서브에이전트로 둘 수 없습니다")
         return self
 
     def all_asset_refs(self) -> list[str]:
@@ -137,6 +170,73 @@ class Manifest(BaseModel):
     def agent_id(self) -> str:
         """카탈로그 식별자."""
         return self.metadata.name
+
+
+class ActionMetadata(BaseModel):
+    """Identity of an action."""
+
+    name: str
+    version: int = Field(ge=1)
+    owner: str
+    description: str = ""
+
+
+class ActionManifest(BaseModel):
+    """A gather → reason → writeback run. Gather and writeback are code, selected by name."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    api_version: Literal["wigtn.agents/v1"] = Field(alias="apiVersion")
+    kind: Literal["action"]
+    metadata: ActionMetadata
+    model: ModelSpec = Field(default_factory=ModelSpec)
+    level: ActionLevel
+    harness_preset: Preset = "standard"
+    extra_middleware: list[str] = Field(default_factory=list)
+    skill: str
+    prompts: dict[str, str] = Field(default_factory=dict)
+    gather: str = "input"
+    writeback: str = "none"
+    output_schema: dict[str, Any]
+
+    @field_validator("skill")
+    @classmethod
+    def _skill_ref(cls, value: str) -> str:
+        if AssetRef.parse(value).kind != "skill":
+            raise ValueError(f"skill에는 skill 참조만 올 수 있습니다: {value}")
+        return value
+
+    @field_validator("prompts")
+    @classmethod
+    def _prompt_refs(cls, value: dict[str, str]) -> dict[str, str]:
+        for ref in value.values():
+            if AssetRef.parse(ref).kind != "prompt":
+                raise ValueError(f"prompts에는 prompt 참조만 올 수 있습니다: {ref}")
+        return value
+
+    @field_validator("output_schema")
+    @classmethod
+    def _object_schema(cls, value: dict[str, Any]) -> dict[str, Any]:
+        if value.get("type") != "object" or not value.get("properties"):
+            raise ValueError("output_schema는 properties가 있는 object 스키마여야 합니다")
+        return value
+
+    @property
+    def skills(self) -> list[str]:
+        """Same accessor as ``Manifest.skills`` (one skill per action)."""
+        return [self.skill]
+
+    def all_asset_refs(self) -> list[str]:
+        """Assets this action references directly."""
+        return [self.skill, *self.prompts.values()]
+
+    @property
+    def agent_id(self) -> str:
+        """Catalog identifier."""
+        return self.metadata.name
+
+
+AnyManifest = Union[Manifest, ActionManifest]
 
 
 def decide_flow(

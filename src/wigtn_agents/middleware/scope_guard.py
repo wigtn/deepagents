@@ -3,19 +3,29 @@
 For tools registered in ``SCOPE_PARAMS`` the named arguments are overwritten with the
 canonical value from the run context. No canonical value → deny (fail-closed), never pass the
 LLM's value through. The original tool call stays untouched in history for audit; only the
-request handed to the tool is rewritten (architecture pattern: tenant isolation, layer 2).
+request handed to the tool is rewritten.
+
+The assembly passes the server-built run context (``worker.build_run_context``) in as
+``static_context``, and that value wins: the main agent, its subagents (separate graphs that do
+not receive the parent's runtime context) and the action lane then all use one canonical scope,
+even when a client sends different values in ``context`` and ``configurable``. The runtime
+context is only read when no static context is given.
+
+A denial carries ``additional_kwargs={"denied": ...}`` so the run record can tell a gate apart
+from a tool that failed.
 """
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, cast
 
 from langchain.agents.middleware import AgentMiddleware, ToolCallRequest
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import ToolCall, ToolMessage
 from langgraph.types import Command
 
-ToolResult = Union[ToolMessage, Command]
+DENIED_KEY = "denied"
+ToolResult = Union[ToolMessage, Command[Any]]
 ToolHandler = Callable[[ToolCallRequest], ToolResult]
 AsyncToolHandler = Callable[[ToolCallRequest], Awaitable[ToolResult]]
 
@@ -38,9 +48,15 @@ def _context_of(request: ToolCallRequest) -> Mapping[str, Any]:
 class ScopeGuardMiddleware(AgentMiddleware):
     """Overwrite scope arguments with the run context's canonical values."""
 
-    def __init__(self, scope_params: Optional[dict[str, tuple[tuple[str, str], ...]]] = None) -> None:
+    def __init__(
+        self,
+        scope_params: Optional[dict[str, tuple[tuple[str, str], ...]]] = None,
+        *,
+        static_context: Optional[Mapping[str, Any]] = None,
+    ) -> None:
         super().__init__()
         self._params = scope_params if scope_params is not None else SCOPE_PARAMS
+        self._static = dict(static_context or {})
         self.overrides: list[dict[str, Any]] = []
 
     def _rewrite(self, request: ToolCallRequest) -> Union[ToolCallRequest, ToolMessage]:
@@ -51,18 +67,19 @@ class ScopeGuardMiddleware(AgentMiddleware):
         context = _context_of(request)
         injected: dict[str, Any] = {}
         for arg_name, ctx_key in bindings:
-            canonical = context.get(ctx_key)
+            canonical = self._static.get(ctx_key) if self._static else context.get(ctx_key)
             if canonical is None:
                 return ToolMessage(
                     content=f"차단: 스코프 정본 없음 ({name}.{arg_name})",
                     tool_call_id=request.tool_call["id"],
                     name=name,
                     status="error",
+                    additional_kwargs={DENIED_KEY: "scope"},
                 )
             injected[arg_name] = canonical
         self.overrides.append({"tool": name, **injected})
         new_call = {**request.tool_call, "args": {**(request.tool_call.get("args") or {}), **injected}}
-        return request.override(tool_call=new_call)
+        return request.override(tool_call=cast(ToolCall, new_call))
 
     def wrap_tool_call(self, request: ToolCallRequest, handler: ToolHandler) -> ToolResult:
         """Inject canonical scope values or deny."""

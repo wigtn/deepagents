@@ -1,0 +1,20 @@
+apiVersion: wigtn.agents/v1
+kind: action
+metadata:
+  name: records-review
+  version: 1
+  owner: agents
+  description: 기록 검토 · 모델이 읽기 도구를 최대 8회까지 골라 쓴 뒤 정해진 형식으로 답한다
+model: {ref: models/default}
+level: bounded-react
+harness_preset: standard
+skill: skill://example/checklist@active
+prompts: {system: prompt://records/system@active}
+gather: input
+writeback: none
+output_schema:
+  type: object
+  properties:
+    verdict: {type: string, description: "ok 또는 needs-review"}
+    reasons: {type: array}
+  required: [verdict]
