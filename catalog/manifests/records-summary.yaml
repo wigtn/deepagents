@@ -1,0 +1,20 @@
+apiVersion: wigtn.agents/v1
+kind: action
+metadata:
+  name: records-summary
+  version: 1
+  owner: agents
+  description: 기간별 기록 요약 · 입력은 코드가 모으고 모델은 한 번만 판단한다
+model: {ref: models/default, max_tokens: 2048}
+level: structured
+skill: skill://example/checklist@active
+prompts: {system: prompt://records/system@active}
+gather: default-plan          # the skill's default_plan read tools, called by code
+writeback: jsonl
+output_schema:
+  type: object
+  properties:
+    summary: {type: string, description: "한두 문장 요약"}
+    open_items: {type: integer, description: "미처리 기록 건수"}
+    next_steps: {type: array, description: "다음 조치"}
+  required: [summary, open_items]

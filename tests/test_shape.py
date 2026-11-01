@@ -5,8 +5,10 @@ from __future__ import annotations
 import ast
 from typing import get_args
 
+import pytest
+
 from tests.conftest import ROOT
-from wigtn_agents.assembly import MIDDLEWARE_ORDER, build_middleware, build_subagents
+from wigtn_agents.assembly import MIDDLEWARE_ORDER, build_middleware, build_subagents, resolve_run_model
 from wigtn_agents.assets.catalog import Catalog
 from wigtn_agents.context import RunContext
 from wigtn_agents.middleware import DEEPAGENTS_BUILTIN_TOOLS, SCOPE_PARAMS
@@ -14,9 +16,11 @@ from wigtn_agents.middleware import DEEPAGENTS_BUILTIN_TOOLS, SCOPE_PARAMS
 SRC = ROOT / "src" / "wigtn_agents"
 
 
-def test_미들웨어_순서가_결정과_같다(catalog: Catalog, ctx: RunContext) -> None:
-    stack = build_middleware(catalog.manifest("records-guide"), catalog, ctx, sink=[])
-    assert tuple(type(m).__name__ for m in stack) == MIDDLEWARE_ORDER
+@pytest.mark.parametrize("preset", ["observe", "standard", "strict"])
+def test_미들웨어_순서가_프리셋_결정과_같다(catalog: Catalog, ctx: RunContext, preset: str) -> None:
+    manifest = catalog.manifest("records-guide").model_copy(update={"harness_preset": preset})
+    stack = build_middleware(manifest, catalog, ctx, sink=[], model=resolve_run_model(manifest, ctx))
+    assert tuple(type(m).__name__ for m in stack) == MIDDLEWARE_ORDER[preset]
 
 
 def test_general_purpose_서브에이전트는_같은_이름과_빈_도구로_억제된다(catalog: Catalog) -> None:
@@ -40,8 +44,24 @@ def test_스코프_인자를_받는_도구는_전부_가드_레지스트리에_�
 
 
 def test_import_시점에_모델이나_에이전트를_만들지_않는다() -> None:
-    banned = {"build_model", "init_chat_model", "create_deep_agent", "assemble", "get_client", "ChatAnthropic"}
-    for path in (SRC / "worker.py", SRC / "assembly.py", SRC / "models.py"):
+    banned = {
+        "build_model",
+        "init_chat_model",
+        "create_deep_agent",
+        "create_agent",
+        "assemble",
+        "get_client",
+        "ChatAnthropic",
+        "ChatOpenAI",
+        "load_registry",
+    }
+    for path in (
+        SRC / "worker.py",
+        SRC / "assembly.py",
+        SRC / "models.py",
+        SRC / "presets.py",
+        SRC / "actions" / "chassis.py",
+    ):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in tree.body:  # module level only
             for call in ast.walk(node):

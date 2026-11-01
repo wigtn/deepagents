@@ -127,6 +127,8 @@ def test_허용_목록_밖_도구_호출은_차단되고_이벤트에_남는다(
     assert tool_events and tool_events[0]["tool"] == {
         "name": "record-write",
         "allowed": False,
+        "denied_by": "permission",
+        "status": "error",
         "latency_ms": tool_events[0]["tool"]["latency_ms"],
     }
 

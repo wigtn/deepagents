@@ -15,7 +15,7 @@ from langchain.agents.middleware import AgentMiddleware, ToolCallRequest
 from langchain_core.messages import ToolMessage
 from langgraph.types import Command
 
-ToolResult = Union[ToolMessage, Command]
+ToolResult = Union[ToolMessage, Command[Any]]
 ToolHandler = Callable[[ToolCallRequest], ToolResult]
 AsyncToolHandler = Callable[[ToolCallRequest], Awaitable[ToolResult]]
 Authorizer = Callable[[str, dict[str, Any]], bool]
@@ -73,6 +73,7 @@ class PermissionFilterMiddleware(AgentMiddleware):
             tool_call_id=request.tool_call["id"],
             name=name,
             status="error",
+            additional_kwargs={"denied": "permission"},
         )
 
     def _check(self, request: ToolCallRequest) -> Optional[ToolMessage]:

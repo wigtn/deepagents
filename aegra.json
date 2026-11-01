@@ -1,6 +1,7 @@
 {
   "dependencies": ["./src"],
   "graphs": {
-    "worker": "./src/wigtn_agents/worker.py:graph"
+    "worker": "./src/wigtn_agents/worker.py:graph",
+    "action": "./src/wigtn_agents/worker.py:action"
   }
 }

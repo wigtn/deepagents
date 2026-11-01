@@ -1,7 +1,7 @@
 # Field notes — 설치본 기준 실측 (증거 트레일)
 
 > 설계 판단의 근거를 설치된 패키지 소스로 다시 확인한 기록.
-> 기준: deepagents **0.7.17** · aegra-api **0.10.5** · langchain 1.4.2 · langgraph 1.2.12 · langgraph-sdk 0.4.5 · Python 3.12 (2026-09-23)
+> 기준: deepagents **0.7.17** · aegra-api **0.10.5** · langchain 1.4.2 · langgraph 1.2.12 · langgraph-sdk 0.4.5 · Python 3.12 (2026-09-23). 11-02 행부터 langchain-core 1.7.3 · langchain-openai 1.7.3 · langchain-mcp-adapters 0.3.2
 
 ## deepagents 0.7.17
 
@@ -41,3 +41,11 @@
 | 09-23 | 스키마 동형 조립으로 읽어도 interrupted thread의 `tasks`·`interrupts`가 비어 있음 | `HumanInTheLoopMiddleware`는 `after_model` **노드**와 `hitl_edited_tool_calls` 채널을 만든다. `interrupt_on={}`는 deepagents가 무시해 HITL이 빠진다. 읽기용 그래프에 그 노드가 없으면 대기 태스크가 매핑되지 않는다 | 읽기용 조립을 **상위집합**으로: sentinel 승인 지점(`__schema_only_never_called__`)으로 HITL을 포함. 가드는 노드를 만들지 않는 `wrap_model_call`로. 테스트 `real.nodes ⊆ schema_only.nodes` |
 | 09-23 | (검증) interrupt 중 서버 재시작 → `command={"resume": {"decisions": [{"type": "approve"}]}}` 로 같은 thread에 **새 run** 생성 → success. interrupt 페이로드는 `action_requests[{name,args,description}]` + `review_configs` | 체크포인트가 프로세스 밖(Postgres)에 있다. 재개는 새 run이다 | 재시작 뒤 재개 확인. "다른 워커"에서의 재개는 Redis + 2인스턴스로 확인할 일 |
 | 09-23 | `POST /assistants`가 400 "Failed to load graph: agent_id가 없습니다" | Aegra `assistant_service.create_assistant`가 `get_graph_for_validation(graph_id)`를 **config 없이** 호출한다(`services/langgraph_service.py:432-`, `access_context="assistants.read"`, store 없음). 팩토리가 run 밖에서도 호출된다는 뜻 — Studio 토폴로지·스키마 읽기도 같은 경로 | `worker.graph`가 `agent_id` 부재 시 예외 대신 **자리표시 그래프**(노드 1개, 실행되면 RuntimeError)를 반환. 검증은 통과하고 실제 run은 loud fail. `runtime.access_context`로 검증/실행을 구분할 수도 있다 |
+| 11-02 | 서브에이전트의 도구 호출이 부모의 ScopeGuard를 거치지 않고, 서브에이전트 안에 같은 가드를 걸어도 `runtime.context`가 비어 있어 모두 차단됨 | deepagents `task` 도구가 서브에이전트를 `subagent.invoke(state, {"configurable": {...}})`로 부른다(`middleware/subagents.py`). `context=`를 넘기지 않는다 | 조립이 run마다 일어나므로 run context를 서브에이전트 미들웨어에 정적으로 넘긴다(`ScopeGuardMiddleware(static_context=ctx)`). 런타임 context에 값이 있으면 그쪽이 이긴다 |
+| 11-02 | `memory: true` 에이전트가 store 없이 돌면 `MemoryMiddleware.before_agent`에서 `AttributeError` | `StoreBackend._get_store()`가 `get_store()`의 `None`을 그대로 돌려준다. Aegra는 store를 주입하지만 로컬 스크립트·테스트는 아니다 | `RuntimeStoreBackend`가 store가 없으면 프로세스 안 `InMemoryStore`로 대신하고 처음 한 번 경고를 남긴다. 스키마 전용 조립은 실행 전에 가드가 아니라 이 단계에서 멈출 수 있어서도 필요했다 |
+| 11-02 | `create_agent(response_format=Model)`의 구조화 응답 도구 호출이 `tool.call` 이벤트에 안 남음 | ToolStrategy는 그 호출을 ToolNode가 아니라 에이전트 안에서 처리한다. `wrap_tool_call`을 지나지 않는다 | action의 `tool.call` 행에는 읽기 도구만 남는다. 결과는 `run.end`와 thread state `result`로 본다 |
+| 11-02 | ChatOpenAI 인스턴스를 넘기면 deepagents가 Responses API를 켜지 않음 | deepagents OpenAI 프로필은 모델을 문자열로 받을 때만 `use_responses_api=True`를 넣는다 | `models.py`가 레지스트리의 `api: responses`를 보고 직접 켠다. langchain-openai 1.7.3은 Responses 요청에서 `max_tokens`→`max_output_tokens`, `reasoning_effort`→`reasoning.effort`로 바꿔 보낸다(`chat_models/base.py`) |
+| 11-02 | 미들웨어 프리셋별로 그래프 노드가 다름 | `before_*`/`after_*` 훅이 노드를 만든다(RepeatedToolCall·OutputValidator·ModelCallLimit·ToolCallLimit, memory의 MemoryMiddleware) | 스키마 전용 조립을 `strict` + `memory: true` + 등록된 모든 extra 미들웨어로 만든다. 테스트가 프리셋 3개 × 에이전트 3개에서 `real.nodes ⊆ schema_only.nodes`를 확인한다 |
+
+| 11-02 | 클라이언트가 `context.entity`와 `configurable.entity`를 다르게 보내면 메인 에이전트와 서브에이전트·gather가 서로 다른 범위를 씀 | Aegra는 요청의 `context`가 비었을 때만 `configurable`을 복사해 runtime context로 쓴다(`services/run_preparation.py:228`). `build_run_context`는 `configurable`을 먼저 본다 | 모든 ScopeGuard에 서버가 만든 run context를 `static_context`로 넘기고 그 값이 이기게 했다. 범위의 정본은 `build_run_context` 하나다 |
+| 11-02 | bounded-react가 "최대 8회"인데 standard에서 도구 2회 만에 `GraphRecursionError` | `recursion_limit`은 그래프 step 수라 미들웨어 훅 노드도 센다 | 라운드는 `ModelCallLimitMiddleware(run_limit=rounds+1, exit_behavior="end")`로 세고, recursion_limit은 넉넉한 안전판(라운드당 25)으로 둔다. 넘기면 "라운드 상한" 오류로 끝난다 |

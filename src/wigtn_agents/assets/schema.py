@@ -143,12 +143,24 @@ class SkillBody(BaseModel):
         return self
 
 
-class ToolBinding(BaseModel):
-    """실행 바인딩. 도구 게이트웨이 경유 참조만 허용한다."""
+HTTP_METHODS: tuple[str, ...] = ("GET", "POST", "PUT", "PATCH", "DELETE")
 
-    gateway_route: str
+
+class ToolBinding(BaseModel):
+    """Where a tool call goes. The worker never holds connection values, only references.
+
+    * ``gateway`` — a named route on the tool gateway client (offline stub by default).
+    * ``http`` — ``operation: "METHOD /path/{param}"`` on the ``api`` asset's base URL;
+      base URL and credential are ``secret://`` references resolved from the environment.
+    * ``mcp`` — remote tool ``tool`` on server ``server`` from ``catalog/mcp.yaml``.
+    """
+
+    type: Literal["gateway", "http", "mcp"] = "gateway"
+    gateway_route: Optional[str] = None
     api: Optional[str] = None
     operation: Optional[str] = None
+    server: Optional[str] = None
+    tool: Optional[str] = None
 
     @field_validator("api")
     @classmethod
@@ -156,6 +168,20 @@ class ToolBinding(BaseModel):
         if value is not None and AssetRef.parse(value).kind != "api":
             raise ValueError(f"binding.api에는 api 참조만 올 수 있습니다: {value}")
         return value
+
+    @model_validator(mode="after")
+    def _fields_for_type(self) -> ToolBinding:
+        if self.type == "gateway" and not self.gateway_route:
+            raise ValueError("gateway 바인딩은 gateway_route가 필요합니다")
+        if self.type == "http":
+            if not self.api or not self.operation:
+                raise ValueError("http 바인딩은 api와 operation이 필요합니다")
+            method = self.operation.split(" ", 1)[0]
+            if method not in HTTP_METHODS or " /" not in self.operation:
+                raise ValueError(f"http operation은 'METHOD /path' 형식이어야 합니다: {self.operation}")
+        if self.type == "mcp" and (not self.server or not self.tool):
+            raise ValueError("mcp 바인딩은 server와 tool이 필요합니다")
+        return self
 
 
 class ToolBody(BaseModel):

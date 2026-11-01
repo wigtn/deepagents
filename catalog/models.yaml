@@ -1,0 +1,60 @@
+# Model alias registry. A manifest names an alias (`model.ref`); a run can switch it with
+# `configurable.model`. Only aliases listed here can be built.
+#
+# provider   openai | openai-compatible | anthropic | fake
+# api        responses (OpenAI Responses API) | chat (Chat Completions or the provider's chat API)
+# *_env      names of environment variables, never the values
+# price      USD per million tokens. An alias without a price is refused before the first call.
+#            A free endpoint states it: {input: 0, output: 0}.
+#            cached_input and cache_write default to the input price.
+# accepts    manifest parameters passed to the provider; others are dropped, not guessed
+# defaults   provider parameters set when the manifest does not set them
+default: models/default
+
+models:
+  models/default:
+    provider: openai
+    model: gpt-6-luna
+    api: responses            # function calling on Chat Completions only works with effort=none
+    api_key_env: OPENAI_API_KEY
+    price: {input: 0.10, cached_input: 0.01, output: 0.50}   # OpenAI pricing page, checked 2026-11-01
+    accepts: [max_tokens, reasoning_effort]                  # temperature support is not documented
+    defaults: {reasoning_effort: medium}
+
+  # Open-weight backbones behind an OpenAI-compatible endpoint (vLLM or a provider API).
+  # Endpoint and price are decided when the backbone is registered; until then these are refused.
+  # A vLLM server needs --enable-auto-tool-choice and the model's --tool-call-parser.
+  models/qwen3.8-flash:
+    provider: openai-compatible
+    model: qwen3.8-flash
+    api: chat
+    base_url_env: WIGTN_AGENT_QWEN_BASE_URL
+    api_key_env: WIGTN_AGENT_QWEN_API_KEY
+    price: null
+    accepts: [temperature, max_tokens]
+
+  models/deepseek-v3.1:
+    provider: openai-compatible
+    model: deepseek-v3.1
+    api: chat
+    base_url_env: WIGTN_AGENT_DEEPSEEK_BASE_URL
+    api_key_env: WIGTN_AGENT_DEEPSEEK_API_KEY
+    price: null
+    accepts: [temperature, max_tokens]
+
+  models/gpt-oss-120b:
+    provider: openai-compatible
+    model: gpt-oss-120b
+    api: chat
+    base_url_env: WIGTN_AGENT_GPT_OSS_BASE_URL
+    api_key_env: WIGTN_AGENT_GPT_OSS_API_KEY
+    price: null
+    accepts: [temperature, max_tokens, reasoning_effort]
+
+  # Scripted offline model (src/wigtn_agents/testing.py). No key, no cost.
+  models/fake:
+    provider: fake
+    model: scripted
+    api: chat
+    price: {input: 0, output: 0}
+    accepts: []

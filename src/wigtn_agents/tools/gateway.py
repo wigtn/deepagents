@@ -1,7 +1,8 @@
-"""Tool gateway client (offline stand-in) and tool-asset → StructuredTool conversion.
+"""Tool-asset → StructuredTool conversion and the offline gateway stand-in.
 
-The worker never holds connection details; a tool asset only carries a ``gateway_route``.
-This stub answers canned rows so the agent loop can be exercised offline.
+The worker never holds connection details. A tool asset carries a binding: a gateway route
+(the stub below answers canned rows so the agent loop runs offline), an HTTP operation on an
+``api`` asset, or a tool on an MCP server.
 """
 
 from __future__ import annotations
@@ -13,8 +14,10 @@ from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, Field, create_model
 
 from wigtn_agents.assets.catalog import Catalog
-from wigtn_agents.assets.schema import Asset
-from wigtn_agents.manifest import Manifest
+from wigtn_agents.assets.schema import ApiBody, Asset, ToolBody
+from wigtn_agents.manifest import AnyManifest
+from wigtn_agents.tools.http import HttpToolClient
+from wigtn_agents.tools.mcp import McpToolClient
 
 _JSON_TYPES: dict[str, type] = {
     "string": str,
@@ -80,8 +83,8 @@ class ToolGatewayClient:
         return handler(operation, payload)
 
 
-def _args_model(name: str, schema: dict[str, Any]) -> type[BaseModel]:
-    """Convert a tool asset's JSON Schema ``input_schema`` into a Pydantic args model."""
+def schema_model(name: str, schema: dict[str, Any]) -> type[BaseModel]:
+    """Convert a flat JSON Schema (tool ``input_schema``, action ``output_schema``) into a Pydantic model."""
     required = set(schema.get("required", []))
     fields: dict[str, Any] = {}
     for prop, spec in schema.get("properties", {}).items():
@@ -94,21 +97,64 @@ def _args_model(name: str, schema: dict[str, Any]) -> type[BaseModel]:
     return create_model(name, **fields)
 
 
-def make_tool(asset: Asset, gateway: ToolGatewayClient) -> BaseTool:
-    """Wrap one tool asset as a StructuredTool that only knows its gateway route."""
-    body = asset.typed_body
+class ToolClients:
+    """Everything a tool call can go through. Defaults: offline gateway stub, real HTTP, real MCP."""
 
-    def _call(**kwargs: Any) -> dict[str, Any]:
-        return gateway.call(body.binding.gateway_route, body.binding.operation, kwargs)  # type: ignore[attr-defined]
+    def __init__(
+        self,
+        gateway: Optional[ToolGatewayClient] = None,
+        http: Optional[HttpToolClient] = None,
+        mcp: Optional[McpToolClient] = None,
+    ) -> None:
+        self.gateway = gateway or ToolGatewayClient()
+        self.http = http or HttpToolClient()
+        self.mcp = mcp or McpToolClient()
 
-    return StructuredTool.from_function(
-        func=_call,
-        name=asset.tool_name(),
-        description=asset.description or asset.name,
-        args_schema=_args_model(f"{asset.tool_name()}_args", body.input_schema),  # type: ignore[attr-defined]
-    )
+
+def make_tool(asset: Asset, clients: ToolClients, catalog: Optional[Catalog] = None) -> BaseTool:
+    """Wrap one tool asset as a StructuredTool bound to its gateway route, HTTP operation or MCP tool."""
+    body: ToolBody = asset.typed_body  # type: ignore[assignment]
+    binding = body.binding
+    args_schema = schema_model(f"{asset.tool_name()}_args", body.input_schema)
+    common: dict[str, Any] = {
+        "name": asset.tool_name(),
+        "description": asset.description or asset.name,
+        "args_schema": args_schema,
+        "handle_tool_error": True,
+    }
+
+    if binding.type == "gateway":
+
+        def _gateway(**kwargs: Any) -> dict[str, Any]:
+            return clients.gateway.call(binding.gateway_route or "", binding.operation, kwargs)
+
+        return StructuredTool.from_function(func=_gateway, **common)
+
+    if binding.type == "http":
+        if catalog is None:
+            raise ValueError(f"{asset.ref}: http 바인딩은 api 자산을 해석할 카탈로그가 필요합니다")
+        api: ApiBody = catalog.resolve(binding.api or "").typed_body  # type: ignore[assignment]
+        operation = binding.operation or ""
+
+        def _http(**kwargs: Any) -> dict[str, Any]:
+            return clients.http.call(api, operation, kwargs)
+
+        async def _ahttp(**kwargs: Any) -> dict[str, Any]:
+            return await clients.http.acall(api, operation, kwargs)
+
+        return StructuredTool.from_function(func=_http, coroutine=_ahttp, **common)
+
+    server, remote = binding.server or "", binding.tool or ""
+
+    def _mcp(**kwargs: Any) -> Any:
+        return clients.mcp.call(server, remote, kwargs)
+
+    async def _amcp(**kwargs: Any) -> Any:
+        return await clients.mcp.acall(server, remote, kwargs)
+
+    return StructuredTool.from_function(func=_mcp, coroutine=_amcp, **common)
 
 
-def build_tools(manifest: Manifest, catalog: Catalog, gateway: ToolGatewayClient) -> list[BaseTool]:
-    """Skill → tool assets (pinned) → gateway-bound StructuredTools."""
-    return [make_tool(asset, gateway) for asset in catalog.tools_for_manifest(manifest)]
+def build_tools(manifest: AnyManifest, catalog: Catalog, clients: ToolClients) -> list[BaseTool]:
+    """Skill → tool assets (pinned) → bound StructuredTools."""
+    return [make_tool(asset, clients, catalog) for asset in catalog.tools_for_manifest(manifest)]
