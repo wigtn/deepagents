@@ -1,0 +1,6 @@
+{
+  "dependencies": ["./src"],
+  "graphs": {
+    "worker": "./src/wigtn_agents/worker.py:graph"
+  }
+}

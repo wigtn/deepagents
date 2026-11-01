@@ -1,0 +1,20 @@
+kind: tool
+name: record-write
+version: 1
+status: active
+owner: platform
+description: 기록 반영 (쓰기 · 실행 승인 필수)
+permission_scope: [write:records]
+mutable_by_sel: []
+provenance: {created_by: human}
+body:
+  input_schema:
+    type: object
+    properties:
+      document: {type: object, description: "기록 본문"}
+      entity: {type: string}
+    required: [document, entity]
+  output_schema: {type: object, properties: {record_id: {type: string}}}
+  side_effect: write
+  idempotent: false
+  binding: {gateway_route: record-write, api: api://records-api@1, operation: "POST /records"}

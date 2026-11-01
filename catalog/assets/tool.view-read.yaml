@@ -1,0 +1,21 @@
+kind: tool
+name: view-read
+version: 1
+status: active
+owner: platform
+description: 고정 쿼리 View 조회
+permission_scope: [read:view]
+mutable_by_sel: []
+provenance: {created_by: human}
+body:
+  input_schema:
+    type: object
+    properties:
+      view: {type: string, description: "View 이름"}
+      period: {type: string}
+      entity: {type: string}
+    required: [view, period, entity]
+  output_schema: {type: object, properties: {rows: {type: array}}}
+  side_effect: read
+  idempotent: true
+  binding: {gateway_route: db-read, operation: "SELECT"}

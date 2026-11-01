@@ -1,0 +1,14 @@
+kind: api
+name: records-api
+version: 1
+status: active
+owner: platform
+description: 예시 기록 저장소 HTTP API 바인딩 (참조만)
+permission_scope: [read:records, write:records]
+mutable_by_sel: []
+provenance: {created_by: human}
+body:
+  openapi_ref: "specs/records-api.yaml"
+  base_url_ref: "secret://records/base-url"
+  credential_ref: "secret://records/service-account"
+  rate_limit: {requests_per_minute: 600}

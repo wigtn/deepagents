@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+dist/
+
+# Secrets · local config
+.env
+.env.*
+!.env.example
+
+# runtime scratch: event log, e2e state, server log, catalog backups
+var/
+
+.DS_Store

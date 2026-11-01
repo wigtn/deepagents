@@ -1,0 +1,33 @@
+kind: skill
+name: example/record-update
+version: 1
+status: active
+owner: agents
+description: 기록 수정 초안 작성과 반영 (쓰기 · 실행 승인 필수)
+inputs:
+  type: object
+  properties:
+    period: {type: string}
+    entity: {type: string}
+    changes: {type: array}
+  required: [period, entity]
+outputs:
+  type: object
+  properties:
+    record_id: {type: string}
+permission_scope: [read:records, write:records]
+mutable_by_sel: [body.instruction]
+provenance: {created_by: human}
+eval_cases:
+  - id: ru-001
+    input: {period: "2026-08", entity: "1000", changes: []}
+    expected: {contains: ["승인"]}
+    judge: contains
+body:
+  trigger: "기록 수정 · 반영 요청"
+  instruction: |
+    1. 수정 항목을 초안으로 정리한다.
+    2. 초안을 사용자에게 보여주고 반영 전 승인을 요청한다.
+    3. 승인 후에만 반영한다. 반려 시 사유를 기록하고 종료한다.
+  tools: [tool://record-read@active, tool://record-write@active]
+  default_plan: [tool://record-read@active, tool://record-write@active]

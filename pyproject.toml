@@ -1,0 +1,62 @@
+[project]
+name = "wigtn-agents"
+version = "0.1.0"
+description = "Aegra worker runtime + create_deep_agent manifest assembly for testing LLM agent harnesses"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "aegra-api~=0.10.5",
+    "aegra-cli~=0.10.5",
+    "deepagents>=0.7.16,<0.8",
+    "langchain-anthropic>=1.0",
+    "langgraph-sdk>=0.3.5",
+    "pydantic>=2.11",
+    "python-dotenv>=1",
+    "pyyaml>=6",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "mypy>=1.14",
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.12",
+    "types-pyyaml>=6",
+]
+
+[tool.uv]
+# Not an installable package on purpose: aegra.json `dependencies: ["./src"]` owns sys.path.
+# Flipping this to a packaged layout doubles the import path resolution.
+package = false
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "D", "ANN"]
+ignore = [
+    "D203", "D213",          # docstring style: one-blank-line-before-class / multi-line-summary-second-line
+    "D105", "D107",          # magic methods / __init__ need no docstring (class docstring covers them)
+    "D400", "D415", "D401",  # first-line punctuation / imperative mood: noise for Korean + event-name docstrings
+    "UP007", "UP045",        # team convention: typing.Optional / typing.Union over PEP 604
+    "B008",                  # FastAPI Header() defaults
+    "ANN401",                # Any in tool arg schemas
+]
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D", "ANN", "N802"]   # Korean test names, no docstrings required
+"scripts/*" = ["D"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "src"
+packages = ["wigtn_agents"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+asyncio_mode = "auto"

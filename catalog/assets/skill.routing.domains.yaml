@@ -1,0 +1,30 @@
+kind: skill
+name: routing/domains
+version: 2
+status: active
+owner: platform
+description: 사용자 질의를 도메인 에이전트로 분기하는 라우팅 절차
+inputs: {type: object, properties: {question: {type: string}}, required: [question]}
+outputs: {type: object, properties: {agent_id: {type: string}}}
+permission_scope: [invoke:agent]
+mutable_by_sel: [body.instruction, body.routes]
+provenance: {created_by: human}
+eval_cases:
+  - id: rc-001
+    input: {question: "8월 기록 점검해줘"}
+    expected: {contains: ["records-writer"]}
+    judge: contains
+  - id: rc-002
+    input: {question: "점검 절차가 뭐야?"}
+    expected: {contains: ["records-guide"]}
+    judge: contains
+body:
+  trigger: "모든 진입 질의 (agent_id 미지정)"
+  instruction: |
+    질의의 의도를 아래 routes에서 고른다. 기록을 바꾸는 행위가 포함되면 쓰기 에이전트로,
+    절차 · 안내 질의는 가이드 에이전트로 보낸다. 판단이 어려우면 사용자에게 선택지를 제시한다.
+  routes:
+    - {intent: "기록 점검 · 미처리 조회 · 기록 수정", agent_id: records-writer}
+    - {intent: "점검 절차 안내 · 용어 · 일정", agent_id: records-guide}
+  tools: [tool://delegate-run@active]
+  default_plan: [tool://delegate-run@active]

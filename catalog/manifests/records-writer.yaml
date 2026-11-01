@@ -1,0 +1,19 @@
+apiVersion: wigtn.agents/v1
+kind: agent
+metadata:
+  name: records-writer
+  version: 7
+  owner: agents
+  worker_class: background
+  description: 기록 점검 · 미처리 정리 · 기록 반영 (실행 승인 포함)
+model: {ref: models/default, temperature: 0.1, max_tokens: 4096}
+harness_preset: background-hitl
+skills: [skill://example/checklist@active, skill://example/record-update@active]
+prompts: {system: prompt://records/system@active}
+flow: {template: approval-gated}
+interrupts: {approve_before: [tool://record-write@active]}
+permissions:
+  allow_tools: [tool://record-read@active, tool://view-read@active, tool://record-write@active]
+  data_scope: [view:default, records:entity-1000]
+extensions: [record_write_adapter]
+sel: {mutable_by_sel: [skills]}

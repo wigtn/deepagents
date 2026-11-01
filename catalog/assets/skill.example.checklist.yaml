@@ -1,0 +1,41 @@
+kind: skill
+name: example/checklist
+version: 3
+status: active
+owner: agents
+description: 기간별 기록 점검 절차
+inputs:
+  type: object
+  properties:
+    period: {type: string}
+    entity: {type: string}
+  required: [period, entity]
+outputs:
+  type: object
+  properties:
+    summary: {type: string}
+    open_items: {type: integer}
+permission_scope: [read:records, read:view]
+mutable_by_sel: [body.instruction, body.default_plan]
+provenance: {created_by: human}
+eval_cases:
+  - id: ec-001
+    input: {period: "2026-08", entity: "1000"}
+    expected: {contains: ["미처리 기록", "확인 대상"]}
+    judge: contains
+  - id: ec-002
+    input: {period: "2026-07", entity: "2000"}
+    expected: {contains: ["미처리 기록"]}
+    judge: contains
+body:
+  trigger: "기록 점검 요청 · 점검 체크리스트 · 미처리 항목 확인"
+  instruction: |
+    1. 대상 기간과 범위를 확정한다.
+    2. 미처리 기록을 조회하고 건수와 금액을 요약한다.
+    3. 확인이 필요한 항목을 고른다.
+    4. 결과를 표로 정리하고 다음 조치를 제안한다.
+  tools: [tool://record-read@active, tool://view-read@active]
+  default_plan: [tool://record-read@active, tool://view-read@active]
+  examples:
+    - input: "8월 기록 점검 부탁해 (범위 1000)"
+      output: "미처리 기록 12건 · 확인 대상 3건 · 다음 조치: ..."

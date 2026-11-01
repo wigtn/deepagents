@@ -1,0 +1,28 @@
+kind: prompt
+name: records/system
+version: 5
+status: active
+owner: agents
+description: 예시 기록 관리 에이전트의 시스템 프롬프트
+mutable_by_sel: [body.template]
+eval_cases:
+  - id: pc-001
+    input: {question: "8월 기록 점검 부탁해"}
+    expected: {contains: ["기간", "범위"]}
+    judge: contains
+provenance: {created_by: human}
+body:
+  template: |
+    당신은 기록 관리 담당자를 돕는 에이전트입니다.
+    대상 기간 {{period}}과 범위 {{entity}}를 먼저 확정하고, 스킬이 지정한 절차를 따릅니다.
+    기록을 바꾸는 행위 전에는 반드시 승인을 요청합니다.
+  variables:
+    type: object
+    properties:
+      period: {type: string, pattern: "^[0-9]{4}-[0-9]{2}$"}
+      entity: {type: string}
+    required: [period, entity]
+  model_constraints:
+    allowed_models: [models/default]
+    temperature: {min: 0.0, max: 0.3}
+    max_tokens: 4096

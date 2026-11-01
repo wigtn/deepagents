@@ -1,0 +1,28 @@
+kind: tool
+name: record-read
+version: 2
+status: active
+owner: platform
+description: 기록 조회 (읽기 전용)
+permission_scope: [read:records]
+mutable_by_sel: []
+provenance: {created_by: human}
+body:
+  input_schema:
+    type: object
+    properties:
+      period: {type: string, description: "YYYY-MM"}
+      entity: {type: string, description: "범위 코드"}
+      category: {type: string, enum: [A, B, C], default: A}
+    required: [period, entity]
+  output_schema:
+    type: object
+    properties:
+      rows: {type: array}
+      count: {type: integer}
+  side_effect: read
+  idempotent: true
+  binding:
+    gateway_route: record-read
+    api: api://records-api@1
+    operation: "GET /records"

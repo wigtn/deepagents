@@ -1,0 +1,75 @@
+"""ScopeGuardMiddleware — the LLM never supplies a data-scope identifier.
+
+For tools registered in ``SCOPE_PARAMS`` the named arguments are overwritten with the
+canonical value from the run context. No canonical value → deny (fail-closed), never pass the
+LLM's value through. The original tool call stays untouched in history for audit; only the
+request handed to the tool is rewritten (architecture pattern: tenant isolation, layer 2).
+"""
+
+from __future__ import annotations
+
+from collections.abc import Awaitable, Callable, Mapping
+from typing import Any, Optional, Union
+
+from langchain.agents.middleware import AgentMiddleware, ToolCallRequest
+from langchain_core.messages import ToolMessage
+from langgraph.types import Command
+
+ToolResult = Union[ToolMessage, Command]
+ToolHandler = Callable[[ToolCallRequest], ToolResult]
+AsyncToolHandler = Callable[[ToolCallRequest], Awaitable[ToolResult]]
+
+# tool name → (arg name, context key). Registration is the protection; tests check coverage.
+SCOPE_PARAMS: dict[str, tuple[tuple[str, str], ...]] = {
+    "record-read": (("entity", "entity"),),
+    "record-write": (("entity", "entity"),),
+    "view-read": (("entity", "entity"),),
+}
+
+
+def _context_of(request: ToolCallRequest) -> Mapping[str, Any]:
+    runtime = getattr(request, "runtime", None)
+    context = getattr(runtime, "context", None)
+    if isinstance(context, Mapping):
+        return context
+    return {}
+
+
+class ScopeGuardMiddleware(AgentMiddleware):
+    """Overwrite scope arguments with the run context's canonical values."""
+
+    def __init__(self, scope_params: Optional[dict[str, tuple[tuple[str, str], ...]]] = None) -> None:
+        super().__init__()
+        self._params = scope_params if scope_params is not None else SCOPE_PARAMS
+        self.overrides: list[dict[str, Any]] = []
+
+    def _rewrite(self, request: ToolCallRequest) -> Union[ToolCallRequest, ToolMessage]:
+        name = request.tool_call["name"]
+        bindings = self._params.get(name)
+        if not bindings:
+            return request
+        context = _context_of(request)
+        injected: dict[str, Any] = {}
+        for arg_name, ctx_key in bindings:
+            canonical = context.get(ctx_key)
+            if canonical is None:
+                return ToolMessage(
+                    content=f"차단: 스코프 정본 없음 ({name}.{arg_name})",
+                    tool_call_id=request.tool_call["id"],
+                    name=name,
+                    status="error",
+                )
+            injected[arg_name] = canonical
+        self.overrides.append({"tool": name, **injected})
+        new_call = {**request.tool_call, "args": {**(request.tool_call.get("args") or {}), **injected}}
+        return request.override(tool_call=new_call)
+
+    def wrap_tool_call(self, request: ToolCallRequest, handler: ToolHandler) -> ToolResult:
+        """Inject canonical scope values or deny."""
+        rewritten = self._rewrite(request)
+        return rewritten if isinstance(rewritten, ToolMessage) else handler(rewritten)
+
+    async def awrap_tool_call(self, request: ToolCallRequest, handler: AsyncToolHandler) -> ToolResult:
+        """Async twin of ``wrap_tool_call``."""
+        rewritten = self._rewrite(request)
+        return rewritten if isinstance(rewritten, ToolMessage) else await handler(rewritten)
