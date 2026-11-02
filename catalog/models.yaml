@@ -12,8 +12,9 @@
 default: models/default
 # Judge of `llm` eval cases (scripts/eval.py --judge-model overrides it). It must be another model
 # than the backbone under evaluation; an eval with the same provider model as judge is refused.
-# Unset until a second priced model is registered.
-# judge: models/<alias>
+# DeepSeek-V3.2: another developer than the default backbone (OpenAI), so the judge does not
+# grade its own family. Evaluating DeepSeek-V3.2 itself needs --judge-model.
+judge: models/deepseek-v3.2
 
 models:
   models/default:
@@ -25,35 +26,61 @@ models:
     accepts: [max_tokens, reasoning_effort]                  # temperature support is not documented
     defaults: {reasoning_effort: medium}
 
-  # Open-weight backbones behind an OpenAI-compatible endpoint (vLLM or a provider API).
-  # Endpoint and price are decided when the backbone is registered; until then these are refused.
-  # A vLLM server needs --enable-auto-tool-choice and the model's --tool-call-parser.
-  models/qwen3.8-flash:
-    provider: openai-compatible
-    model: qwen3.8-flash
-    api: chat
-    base_url_env: WIGTN_AGENT_QWEN_BASE_URL
-    api_key_env: WIGTN_AGENT_QWEN_API_KEY
-    price: null
-    accepts: [temperature, max_tokens]
-
-  models/deepseek-v3.1:
-    provider: openai-compatible
-    model: deepseek-v3.1
-    api: chat
-    base_url_env: WIGTN_AGENT_DEEPSEEK_BASE_URL
-    api_key_env: WIGTN_AGENT_DEEPSEEK_API_KEY
-    price: null
-    accepts: [temperature, max_tokens]
-
+  # Open-weight backbones on MARA Cloud (OpenAI-compatible, https://api.cloud.mara.com/v1).
+  # Prices: MARA list price per 1M tokens (https://cloud.mara.com/plans/pricing, checked 2026-11-01).
+  # Tool calling and structured output checked on 2026-11-03 for gpt-oss-120b, DeepSeek-V3.2 and
+  # gemma-4-31B-it; DeepSeek-V3.1 and MiniMax-M3 answered 429 (rate limit) that day.
+  # MARA does not publish the serving engine or quantization. It answers 429 under load, so the
+  # client retries.
   models/gpt-oss-120b:
     provider: openai-compatible
     model: gpt-oss-120b
     api: chat
-    base_url_env: WIGTN_AGENT_GPT_OSS_BASE_URL
-    api_key_env: WIGTN_AGENT_GPT_OSS_API_KEY
-    price: null
+    base_url: https://api.cloud.mara.com/v1
+    api_key_env: MARACLOUD_API_KEY
+    price: {input: 0.15, output: 0.75}
     accepts: [temperature, max_tokens, reasoning_effort]
+    defaults: {max_retries: 4}
+
+  models/deepseek-v3.1:
+    provider: openai-compatible
+    model: DeepSeek-V3.1
+    api: chat
+    base_url: https://api.cloud.mara.com/v1
+    api_key_env: MARACLOUD_API_KEY
+    price: {input: 0.60, output: 1.70}
+    accepts: [temperature, max_tokens]
+    defaults: {max_retries: 4}
+
+  models/deepseek-v3.2:
+    provider: openai-compatible
+    model: DeepSeek-V3.2
+    api: chat
+    base_url: https://api.cloud.mara.com/v1
+    api_key_env: MARACLOUD_API_KEY
+    price: {input: 3.00, output: 4.50}
+    accepts: [temperature, max_tokens]
+    defaults: {max_retries: 4}   # context 32k: enough for a judge, tight for a long agent run
+
+  models/gemma-4-31b:
+    provider: openai-compatible
+    model: gemma-4-31B-it
+    api: chat
+    base_url: https://api.cloud.mara.com/v1
+    api_key_env: MARACLOUD_API_KEY
+    price: {input: 0.38, output: 1.15}
+    accepts: [temperature, max_tokens]
+    defaults: {max_retries: 4}
+
+  models/minimax-m3:
+    provider: openai-compatible
+    model: MiniMax-M3
+    api: chat
+    base_url: https://api.cloud.mara.com/v1
+    api_key_env: MARACLOUD_API_KEY
+    price: {input: 0.60, output: 2.40}
+    accepts: [temperature, max_tokens]
+    defaults: {max_retries: 4}
 
   # Scripted offline model (src/wigtn_agents/testing.py). No key, no cost.
   models/fake:

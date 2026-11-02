@@ -39,10 +39,19 @@ def test_등록되지_않은_별칭은_거부한다(registry: ModelRegistry) -> 
         registry.resolve("openai:gpt-6-luna")  # provider ids are not aliases
 
 
-def test_가격이_없는_별칭은_호출_전에_거부한다(registry: ModelRegistry, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("WIGTN_AGENT_QWEN_BASE_URL", "http://localhost:8000/v1")
+LOCAL = {"provider": "openai-compatible", "model": "local-m", "base_url_env": "WIGTN_AGENT_LOCAL_BASE_URL"}
+
+
+def _with_local(price: object) -> ModelRegistry:
+    data = yaml.safe_load((CATALOG_DIR / "models.yaml").read_text(encoding="utf-8"))
+    data["models"]["models/local"] = {**LOCAL, "price": price}
+    return ModelRegistry.model_validate(data)
+
+
+def test_가격이_없는_별칭은_호출_전에_거부한다(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("WIGTN_AGENT_LOCAL_BASE_URL", "http://localhost:8000/v1")
     with pytest.raises(LookupError, match="가격"):
-        build_model("models/qwen3.8-flash", registry=registry)
+        build_model("models/local", registry=_with_local(None))
 
 
 def test_받지_않는_파라미터는_보내지_않는다(registry: ModelRegistry) -> None:
@@ -62,18 +71,34 @@ def test_gpt_6_luna는_Responses_API로_만든다(registry: ModelRegistry, monke
     assert any(type(c).__name__ == "BudgetCallback" for c in model.callbacks or [])  # type: ignore[union-attr]
 
 
-def test_openai_호환_엔드포인트는_주소_변수가_필요하다(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    data = yaml.safe_load((CATALOG_DIR / "models.yaml").read_text(encoding="utf-8"))
-    data["models"]["models/qwen3.8-flash"]["price"] = {"input": 0, "output": 0}
-    registry = ModelRegistry.model_validate(data)
-    monkeypatch.delenv("WIGTN_AGENT_QWEN_BASE_URL", raising=False)
-    with pytest.raises(LookupError, match="WIGTN_AGENT_QWEN_BASE_URL"):
-        build_model("models/qwen3.8-flash", registry=registry)
-    monkeypatch.setenv("WIGTN_AGENT_QWEN_BASE_URL", "http://localhost:8000/v1")
-    model = build_model("models/qwen3.8-flash", registry=registry, temperature=0.0)
+def test_openai_호환_엔드포인트는_주소_변수가_필요하다(monkeypatch: pytest.MonkeyPatch) -> None:
+    registry = _with_local({"input": 0, "output": 0})
+    monkeypatch.delenv("WIGTN_AGENT_LOCAL_BASE_URL", raising=False)
+    with pytest.raises(LookupError, match="WIGTN_AGENT_LOCAL_BASE_URL"):
+        build_model("models/local", registry=registry)
+    monkeypatch.setenv("WIGTN_AGENT_LOCAL_BASE_URL", "http://localhost:8000/v1")
+    model = build_model("models/local", registry=registry, temperature=0.0)
     assert model.use_responses_api is False  # type: ignore[attr-defined]
     assert str(model.openai_api_base) == "http://localhost:8000/v1"  # type: ignore[attr-defined]
     assert model.temperature == 0.0  # type: ignore[attr-defined]
+
+
+def test_MARA_Cloud_모델은_고정_주소와_키로_만든다(registry: ModelRegistry, monkeypatch: pytest.MonkeyPatch) -> None:
+    mara = [a for a, e in registry.models.items() if e.base_url == "https://api.cloud.mara.com/v1"]
+    assert len(mara) == 5 and all(registry.models[a].price is not None for a in mara)
+    monkeypatch.delenv("MARACLOUD_API_KEY", raising=False)
+    with pytest.raises(LookupError, match="MARACLOUD_API_KEY"):
+        build_model("models/gpt-oss-120b", registry=registry)
+    monkeypatch.setenv("MARACLOUD_API_KEY", "k-test")
+    model = build_model("models/gpt-oss-120b", registry=registry, reasoning_effort="low")
+    assert str(model.openai_api_base) == "https://api.cloud.mara.com/v1"  # type: ignore[attr-defined]
+    assert model.max_retries == 4 and model.reasoning_effort == "low"  # type: ignore[attr-defined]
+
+
+def test_기본_채점_모델은_기본_백본과_다른_개발사_모델이다(registry: ModelRegistry) -> None:
+    assert registry.judge is not None
+    judge, backbone = registry.resolve(registry.judge), registry.resolve(None)
+    assert judge.model_id != backbone.model_id and "gpt" not in judge.entry.model
 
 
 def test_fake_별칭과_환경_변수는_오프라인_모델을_만든다(
@@ -86,7 +111,7 @@ def test_fake_별칭과_환경_변수는_오프라인_모델을_만든다(
 
 def test_레지스트리_규칙_위반은_로드에서_실패한다() -> None:
     base = {"default": "a", "models": {"a": {"provider": "openai-compatible", "model": "m"}}}
-    with pytest.raises(ValueError, match="base_url_env"):
+    with pytest.raises(ValueError, match="base_url"):
         ModelRegistry.model_validate(base)
     with pytest.raises(ValueError, match="default"):
         ModelRegistry.model_validate({"default": "b", "models": {"a": {"provider": "fake", "model": "m"}}})
