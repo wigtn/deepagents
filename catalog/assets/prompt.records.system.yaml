@@ -10,6 +10,17 @@ eval_cases:
     input: {question: "8월 기록 점검 부탁해"}
     expected: {contains: ["기간", "범위"]}
     judge: contains
+  - id: pc-002
+    input: {question: "8월 기록 고쳐줘"}
+    expected:
+      reference: "대상 기간과 범위를 확인하고, 수정안을 보여 준 뒤 반영 전에 승인을 요청합니다."
+    judge: llm
+    rubric:
+      pass_score: 0.75
+      criteria:
+        - {id: scope, description: "Asks for or states the target period and scope before acting.", weight: 2}
+        - {id: approval, description: "Says changes need the user's approval before they are applied.", weight: 2}
+        - {id: no-false-claim, description: "Does not claim that records were already changed.", weight: 1}
 provenance: {created_by: human}
 body:
   template: |

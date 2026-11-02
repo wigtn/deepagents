@@ -2,15 +2,22 @@
 
     PYTHONPATH=src uv run python scripts/eval.py records-guide
     PYTHONPATH=src uv run python scripts/eval.py records-summary --model models/qwen3.8-flash --batch backbone-qwen
-    PYTHONPATH=src uv run python scripts/eval.py records-guide --model models/fake      # offline
+    PYTHONPATH=src uv run python scripts/eval.py records-guide --judge-model models/<other>
+    PYTHONPATH=src uv run python scripts/eval.py records-guide --model models/fake --no-llm   # offline
 
 Each skill and prompt asset can carry ``eval_cases`` (input, expected, judge). The cases of every
 asset the manifest reaches run once each with ``session_type=evaluation`` and one ``batch_id``,
-so the event log rows of this eval can be selected later. Judges: ``contains`` (every expected
-string appears), ``exact``; ``llm`` cases are reported as skipped.
+so the event log rows of this eval can be selected later. Judges:
 
-Output: ``var/eval/<agent>-<batch>.jsonl`` (one row per case) and a summary line. Exit code 1 if
-any case failed.
+* ``contains``: every string of ``expected.contains`` appears in the answer;
+* ``exact``: the answer equals ``expected.text``;
+* ``llm``: a judge model grades the answer against the case's ``rubric`` (criteria with weights
+  and a ``pass_score``). The judge must be another model than the backbone; the eval stops before
+  the first run if it is the same. ``--no-llm`` reports these cases as skipped instead.
+
+Output: ``var/eval/<agent>-<batch>.jsonl`` (one row per case, with per-criterion verdicts, score,
+judge model and rubric hash for ``llm`` cases) and a summary line. Exit code 1 if any case
+failed, 2 if the judge cannot be used.
 """
 
 from __future__ import annotations
@@ -30,17 +37,10 @@ from dotenv import load_dotenv  # noqa: E402
 
 from wigtn_agents.assets.schema import EvalCase  # noqa: E402
 from wigtn_agents.context import default_context  # noqa: E402
+from wigtn_agents.evals import Grade, llm_grade, resolve_judge, rule_grade  # noqa: E402
+from wigtn_agents.models import build_model, load_registry  # noqa: E402
 from wigtn_agents.runner import run_local  # noqa: E402
 from wigtn_agents.worker import load_catalog  # noqa: E402
-
-
-def judge(case: EvalCase, text: str) -> str:
-    """passed | failed | skipped."""
-    if case.judge == "contains":
-        return "passed" if all(str(s) in text for s in case.expected.get("contains", [])) else "failed"
-    if case.judge == "exact":
-        return "passed" if text.strip() == str(case.expected.get("text", "")).strip() else "failed"
-    return "skipped"
 
 
 def user_text(case: EvalCase) -> str:
@@ -57,18 +57,33 @@ async def main() -> int:
     parser.add_argument("--middleware", action="append", default=[])
     parser.add_argument("--batch", help="batch_id (default eval-<utc timestamp>)")
     parser.add_argument("--entity", default="1000", help="scope when a case input has no entity")
+    parser.add_argument("--judge-model", help="judge alias for llm cases (default: judge in catalog/models.yaml)")
+    parser.add_argument("--no-llm", action="store_true", help="report llm cases as skipped")
     args = parser.parse_args()
 
     catalog = load_catalog()
     is_action = args.agent_id in catalog.action_ids()
     manifest = catalog.action(args.agent_id) if is_action else catalog.manifest(args.agent_id)
     batch = args.batch or f"eval-{datetime.now(UTC).strftime('%Y%m%dT%H%M%S')}"
+    cases = catalog.eval_cases_for(manifest.all_asset_refs())
+
+    registry = load_registry()
+    backbone = registry.resolve(args.model or manifest.model.ref)
+    judge = judge_model = None
+    if not args.no_llm and any(c.judge == "llm" for _, c in cases):
+        try:
+            judge = resolve_judge(registry, backbone, args.judge_model)
+            judge_model = build_model(judge.alias, registry=registry)
+        except (LookupError, ValueError, KeyError) as exc:
+            print(f"채점 모델을 쓸 수 없습니다: {exc}", file=sys.stderr)
+            return 2
+
     out = ROOT / "var" / "eval" / f"{args.agent_id}-{batch}.jsonl"
     out.parent.mkdir(parents=True, exist_ok=True)
 
     counts = {"passed": 0, "failed": 0, "skipped": 0}
     with out.open("w", encoding="utf-8") as report:
-        for ref, case in catalog.eval_cases_for(manifest.all_asset_refs()):
+        for ref, case in cases:
             ctx = default_context(
                 args.agent_id,
                 principal="eval",
@@ -79,12 +94,16 @@ async def main() -> int:
                 middleware=args.middleware,
             )
             payload: Any = dict(case.input) if is_action else user_text(case)
-            if case.judge == "llm":
-                verdict, text, status = "skipped", "", "not-run"
+            if case.judge == "llm" and judge is None:
+                grade, text, status = Grade(verdict="skipped"), "", "not-run"
             else:
                 result = await run_local(args.agent_id, payload, ctx, catalog=catalog)
                 text, status = result.text(), result.status
-                verdict = judge(case, text)
+                if case.judge == "llm":
+                    grade = await llm_grade(case, text, judge_model=judge_model, judge=judge)  # type: ignore[arg-type]
+                else:
+                    grade = rule_grade(case, text)
+            verdict = grade.verdict
             counts[verdict] += 1
             row = {
                 "batch_id": batch,
@@ -94,7 +113,9 @@ async def main() -> int:
                 "judge": case.judge,
                 "verdict": verdict,
                 "status": status,
-                "model": args.model or manifest.model.ref,
+                "model": backbone.alias,
+                "model_id": backbone.model_id,
+                **grade.model_dump(exclude={"verdict"}, exclude_none=True),
                 "output": text[:2000],
             }
             report.write(json.dumps(row, ensure_ascii=False) + "\n")

@@ -68,6 +68,10 @@ PYTHONPATH=src uv run python scripts/run.py records-writer "8월 기록 반영" 
 ```
 
 Eval cases carried by the assets: `PYTHONPATH=src uv run python scripts/eval.py records-guide --model <alias>`.
+A case is graded by `contains` (expected strings appear), `exact` (equal text) or `llm` (a judge model grades the
+answer against the case's rubric: criteria with weights and a `pass_score`; the score is computed from the per-criterion
+calls, not asked of the judge). The judge (`--judge-model`, or `judge` in `catalog/models.yaml`) must be another
+provider model than the backbone; the eval stops before the first run otherwise. `--no-llm` skips `llm` cases.
 
 Offline tests (no model calls): `uv run pytest -q`. Lint: `uv run ruff check . && uv run ruff format --check .`.
 Types: `uv run mypy`.
@@ -147,12 +151,9 @@ Every row carries `thread_id`, `run_id`, `batch_id`, `session_type`, `agent_id`,
 action carry `step: gather`), `run.error` (error class only) and `run.end` (`ok` · `interrupted` · `error` ·
 `cancelled`).
 
-Langfuse and Phoenix receive spans through Aegra's OpenTelemetry fan-out (`OTEL_TARGETS`). LangSmith uses LangChain's
-own tracer (`LANGSMITH_TRACING`). The three tools do not record the same shape (checked 2026-11-01). LangSmith keeps
-one run as one trace, including the middleware `awrap_model_call` and `awrap_tool_call` hooks as spans. The
-OpenInference records sent to Langfuse and Phoenix have no span for those hooks, so model and tool calls made inside
-them lose their parent and become separate traces (one run, four traces). Each piece still carries the `thread_id`
-and `run_id` metadata that Aegra adds.
+The runtime only emits these records. Aegra can also export spans to OpenTelemetry targets (`OTEL_TARGETS`) and
+LangChain to LangSmith (`LANGSMITH_TRACING`); reading and analyzing any of them is the job of the system attached
+at the record point, not of this runtime.
 
 ## Layout
 
@@ -171,8 +172,7 @@ and `run_id` metadata that Aegra adds.
 
 ## Status
 
-Not yet done: the open-weight endpoints and prices, one run as one trace in Langfuse and Phoenix, and an `llm` judge
-for eval cases.
+Not yet done: the open-weight endpoints and prices, and a registered judge model.
 
 ## License
 

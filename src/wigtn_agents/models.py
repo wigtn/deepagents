@@ -104,12 +104,15 @@ class ModelRegistry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     default: str
+    # Default judge for ``llm`` eval cases; an eval refuses a judge that is the backbone itself.
+    judge: Optional[str] = None
     models: dict[str, ModelEntry]
 
     @model_validator(mode="after")
     def _default_registered(self) -> ModelRegistry:
-        if self.default not in self.models:
-            raise ValueError(f"default 별칭이 models에 없습니다: {self.default}")
+        for key, alias in (("default", self.default), ("judge", self.judge)):
+            if alias is not None and alias not in self.models:
+                raise ValueError(f"{key} 별칭이 models에 없습니다: {alias}")
         return self
 
     @classmethod
