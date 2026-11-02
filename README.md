@@ -124,7 +124,7 @@ data. `[extra]` is where research middleware attaches (see [docs/attach.md](docs
 | Run | Agent Protocol through `langgraph_sdk`, or `scripts/run.py`. Per run: `model`, `middleware`, `batch_id`, `session_type`, `entity` in `configurable` |
 | Tools | Tool asset `binding.type`: `gateway` (offline stub), `http` (an `api` asset; values from `secret://` references), `mcp` (a server in `catalog/mcp.yaml`) |
 | Middleware | Entry point group `wigtn_agents.middleware`, selected by name in the manifest (`extra_middleware`) or per run |
-| Record | One JSONL row per event (`WIGTN_AGENT_EVENT_LOG`), plus Langfuse / Phoenix / LangSmith traces |
+| Record | One JSONL row per event (`WIGTN_AGENT_EVENT_LOG`), plus traces to Langfuse / Phoenix / LangSmith (`OTEL_TARGETS`) |
 
 Action gatherers and writeback ports attach the same way (`wigtn_agents.gatherers`, `wigtn_agents.writebacks`).
 
@@ -151,9 +151,22 @@ Every row carries `thread_id`, `run_id`, `batch_id`, `session_type`, `agent_id`,
 action carry `step: gather`), `run.error` (error class only) and `run.end` (`ok` · `interrupted` · `error` ·
 `cancelled`).
 
-The runtime only emits these records. Aegra can also export spans to OpenTelemetry targets (`OTEL_TARGETS`) and
-LangChain to LangSmith (`LANGSMITH_TRACING`); reading and analyzing any of them is the job of the system attached
-at the record point, not of this runtime.
+## Tracing
+
+Every run is traced to Langfuse, Phoenix and LangSmith, any or all of them: `OTEL_TARGETS=LANGFUSE,PHOENIX,LANGSMITH`.
+The spans come from one source, the OpenInference LangChain instrumentor, so the three tools get the same trace of a
+run: one trace per run, the model and tool calls of the main agent, sub-agents and action steps under it. Langfuse and
+Phoenix are Aegra's targets; LangSmith gets the same spans through its OTLP endpoint (`src/wigtn_agents/tracing.py`).
+In-process runs (`scripts/run.py --local`, `scripts/eval.py`) trace to the same targets.
+
+Each trace carries the session (`thread_id`), the user (principal) and metadata (`run_id`, `agent_id`, `batch_id`,
+`session_type`, `model_alias`), so a trace and the run record rows of the same run share `run_id`.
+
+LangSmith's own LangChain tracer (`LANGSMITH_TRACING=true`) is refused while an OTLP target is on. LangChain wraps
+middleware `wrap_*` hooks in LangSmith runs that the OpenInference tracer never sees, so the calls inside every hook
+would land in separate traces in Langfuse and Phoenix. Use `LANGSMITH` in `OTEL_TARGETS` instead.
+
+The runtime traces and records; reading and analyzing traces is the job of the system attached at the record point.
 
 ## Layout
 

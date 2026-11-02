@@ -97,8 +97,15 @@ async def run_remote(args: argparse.Namespace, kind: str) -> dict[str, Any]:
         else {"input": payload_for(kind, args.input)}
     )
     # The full configurable every time: Aegra merges assistant and run config shallowly.
+    # Trace metadata: Aegra puts it on every span of the run (Langfuse, Phoenix, LangSmith).
+    from wigtn_agents.runner import trace_metadata
+
     final = await c.runs.wait(
-        tid, assistant_id_for(args.agent_id), input=run_input, config={"configurable": configurable(args)}
+        tid,
+        assistant_id_for(args.agent_id),
+        input=run_input,
+        config={"configurable": configurable(args)},
+        metadata=trace_metadata(args.agent_id, configurable(args)),  # type: ignore[arg-type]
     )
     runs = await c.runs.list(tid, limit=1)
     values = final if isinstance(final, dict) else {}
@@ -123,7 +130,16 @@ def main() -> None:
         kind = "agent"
     else:
         raise SystemExit(f"unknown agent or action: {args.agent_id}")
-    outcome = asyncio.run(run_local(args, kind) if args.local else run_remote(args, kind))
+    if args.local:
+        from wigtn_agents.tracing import start_local_tracing, stop_local_tracing
+
+        start_local_tracing()
+        try:
+            outcome = asyncio.run(run_local(args, kind))
+        finally:
+            stop_local_tracing()
+    else:
+        outcome = asyncio.run(run_remote(args, kind))
     print(json.dumps(outcome, ensure_ascii=False, indent=2, default=str))
 
 

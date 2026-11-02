@@ -8,7 +8,7 @@ runtime itself: each one selects or adds code by name, and the run record shows 
 | Run | Driving agents: batches, backbone sweeps, replays | `configurable` of each run |
 | Tools | Giving an agent a real system to call | `binding` of a tool asset |
 | Middleware | Code that watches or changes model and tool calls (defenses, probes, rewrites) | `extra_middleware` in the manifest, or `configurable.middleware` |
-| Record | Reading what happened (analyzers, dashboards) | `WIGTN_AGENT_EVENT_LOG`, OpenTelemetry targets, LangSmith |
+| Record | Reading what happened (analyzers, dashboards) | `WIGTN_AGENT_EVENT_LOG`, traces in Langfuse / Phoenix / LangSmith |
 
 ## 1. Run
 
@@ -146,6 +146,8 @@ my-store = "my_package.ports:write"        # write(WritebackRequest) -> dict
 | `session_type` · `actor_type` · `actor_id` | Who ran it |
 | `event_type` | `run.start` · `llm.call` (`usage`) · `tool.call` (`tool.name`, `tool.allowed`, `tool.denied_by`, `tool.status`, `tool.latency_ms`, `step` for gather calls) · `run.error` (`error_class`) · `run.end` (`status`) |
 
-Error messages are never recorded, only the error class, because a provider message can carry user data. Langfuse and
-Phoenix get OpenInference spans through `OTEL_TARGETS`; LangSmith gets LangChain's own trace. Join them to the JSONL
-rows on `thread_id` and `run_id`.
+Error messages are never recorded, only the error class, because a provider message can carry user data.
+
+Traces go to Langfuse, Phoenix and LangSmith (`OTEL_TARGETS=LANGFUSE,PHOENIX,LANGSMITH`), the same spans to each, one
+trace per run. Trace metadata carries `run_id`, so a trace and its JSONL rows can be joined. Send per-run metadata of
+your own in the run's `metadata` (`client.runs.wait(..., metadata={...})`); primitive values only.
