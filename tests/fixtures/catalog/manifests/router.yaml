@@ -1,0 +1,16 @@
+apiVersion: wigtn.agents/v1
+kind: agent
+metadata:
+  name: router
+  version: 3
+  owner: platform
+  worker_class: interactive
+  description: Orchestrator · agent_id 미지정 요청의 분기. 라우팅 테이블은 skill 자산
+model: {ref: models/default, temperature: 0.0, max_tokens: 1024}
+harness_preset: standard
+skills: [skill://routing/domains@active]
+prompts: {system: prompt://router/system@active}
+flow: {template: react}
+permissions:
+  allow_tools: [tool://delegate-run@active]
+sel: {mutable_by_sel: []}

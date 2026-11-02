@@ -1,0 +1,21 @@
+apiVersion: wigtn.agents/v1
+kind: action
+metadata:
+  name: replenishment-proposal
+  version: 1
+  owner: agents
+  description: 보충 제안 · 코드가 재고를 모으고 모델은 한 번만 판단한다
+model: {ref: models/default, max_tokens: 2048}
+level: structured
+harness_preset: standard
+skill: skill://erp/stock-check@active
+prompts: {system: prompt://erp/system@active}
+gather: default-plan
+writeback: jsonl
+output_schema:
+  type: object
+  properties:
+    materials: {type: array, description: "보충이 필요한 자재 코드 목록"}
+    total_value: {type: integer, description: "제안 금액 합계 (원)"}
+    summary: {type: string, description: "한두 문장 요약"}
+  required: [materials, total_value, summary]

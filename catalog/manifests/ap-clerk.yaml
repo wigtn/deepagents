@@ -1,0 +1,20 @@
+apiVersion: wigtn.agents/v1
+kind: agent
+metadata:
+  name: ap-clerk
+  version: 1
+  owner: agents
+  worker_class: background
+  description: 매입 담당 · 3-way 매칭 예외 점검 · 지급 보류 (실행 승인 포함)
+model: {ref: models/default, temperature: 0.1, max_tokens: 4096}
+harness_preset: standard
+skills: [skill://erp/invoice-match@active, skill://erp/payment-block@active]
+prompts: {system: prompt://erp/system@active}
+flow: {template: approval-gated}
+interrupts: {approve_before: [tool://erp-payment-block@active]}
+permissions:
+  allow_tools: [tool://erp-period-status@active, tool://erp-three-way-match@active, tool://erp-invoice-read@active, tool://erp-po-read@active, tool://erp-payment-block@active]
+  data_scope: [erp:read, erp:payables-write]
+subagents: [erp-assistant]
+memory: true
+sel: {mutable_by_sel: [skills]}

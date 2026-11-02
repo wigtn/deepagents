@@ -1,0 +1,21 @@
+apiVersion: wigtn.agents/v1
+kind: action
+metadata:
+  name: collections-priority
+  version: 1
+  owner: agents
+  description: 채권 회수 우선순위 · 코드가 연령 분석을 모으고 모델은 한 번만 판단한다
+model: {ref: models/default, max_tokens: 2048}
+level: structured
+harness_preset: standard
+skill: skill://erp/ar-review@active
+prompts: {system: prompt://erp/system@active}
+gather: default-plan
+writeback: jsonl
+output_schema:
+  type: object
+  properties:
+    priorities: {type: array, description: "회수 우선순위 순서의 고객 코드"}
+    over_limit: {type: array, description: "여신 한도를 넘은 고객 코드"}
+    summary: {type: string, description: "한두 문장 요약"}
+  required: [priorities, over_limit, summary]

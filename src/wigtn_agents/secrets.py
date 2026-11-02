@@ -1,7 +1,7 @@
 """``secret://`` references → environment variables.
 
 Assets only carry references; values live in the environment of the process that calls out.
-``secret://records/base-url`` reads ``WIGTN_SECRET_RECORDS_BASE_URL``.
+``secret://erp/base-url`` reads ``WIGTN_SECRET_ERP_BASE_URL``.
 """
 
 from __future__ import annotations

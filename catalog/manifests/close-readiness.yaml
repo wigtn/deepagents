@@ -1,0 +1,21 @@
+apiVersion: wigtn.agents/v1
+kind: action
+metadata:
+  name: close-readiness
+  version: 1
+  owner: agents
+  description: 월마감 준비 판정 · 코드가 점검표를 모으고 모델은 한 번만 판단한다
+model: {ref: models/default, max_tokens: 2048}
+level: structured
+harness_preset: standard
+skill: skill://erp/close-check@active
+prompts: {system: prompt://erp/system@active}
+gather: default-plan
+writeback: jsonl
+output_schema:
+  type: object
+  properties:
+    ready: {type: boolean, description: "마감 가능 여부"}
+    open_items: {type: array, description: "남은 점검 항목 id"}
+    summary: {type: string, description: "한두 문장 요약"}
+  required: [ready, open_items, summary]

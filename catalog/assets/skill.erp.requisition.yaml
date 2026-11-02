@@ -1,0 +1,32 @@
+kind: skill
+name: erp/requisition
+version: 1
+status: active
+owner: agents
+description: 보충 구매요청 생성 (쓰기 · 실행 승인 필수)
+inputs: {type: object, properties: {materials: {type: array}}}
+outputs: {type: object, properties: {requisition: {type: string}}}
+permission_scope: [read:inventory, write:purchasing]
+mutable_by_sel: [body.instruction, body.default_plan]
+provenance: {created_by: human}
+eval_cases:
+  - id: rq-001
+    input: {question: "부족한 자재 보충 구매요청 만들어줘"}
+    expected:
+      reference: "M-1001 150개(12,750,000원)와 M-1003 500개(550,000원)를 요청 대상으로 보여 주고, 만들기 전에 승인을 요청합니다."
+    judge: llm
+    rubric:
+      pass_score: 0.75
+      criteria:
+        - {id: lines, description: "Proposes M-1001 (150) and M-1003 (500), the materials below their reorder point, with those quantities.", weight: 2}
+        - {id: value, description: "Shows the expected value or unit cost basis of the request.", weight: 1}
+        - {id: approval, description: "Asks for or waits on approval before creating the requisition.", weight: 2}
+body:
+  trigger: "구매요청 생성 · 보충 발주 요청"
+  instruction: |
+    1. erp-stock-read로 제안 수량을 다시 확인한다. 사용자가 수량을 정하면 그 수량을 쓴다.
+    2. 요청할 자재 · 수량 · 예상 금액을 보여 주고 승인을 요청한다.
+    3. 승인 후에만 erp-requisition-create를 한 번 호출한다. 여러 자재는 한 요청에 줄로 넣는다.
+    4. 결과로 요청 번호와 납기 예정일을 적는다.
+  tools: [tool://erp-period-status@active, tool://erp-stock-read@active, tool://erp-requisition-create@active]
+  default_plan: [tool://erp-stock-read@active, tool://erp-requisition-create@active]

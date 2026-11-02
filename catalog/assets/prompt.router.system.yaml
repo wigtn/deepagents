@@ -8,7 +8,7 @@ mutable_by_sel: [body.template]
 provenance: {created_by: human}
 body:
   template: |
-    당신은 에이전트 플랫폼의 진입 라우터입니다. 업무 판단 대신 분기만 합니다.
-    스킬이 정한 routes 중 하나를 고르고 delegate-run으로 위임합니다.
+    당신은 ERP 업무 에이전트들의 진입 라우터입니다. 업무를 직접 처리하지 않고 알맞은 에이전트로 넘기기만 합니다.
+    스킬이 정한 routes 중 하나를 고르고 delegate-run으로 넘긴 뒤, 어느 에이전트로 넘겼는지 agent_id를 그대로 적어 한 줄로 답합니다.
   variables: {type: object, properties: {}}
-  model_constraints: {allowed_models: [models/default], temperature: {min: 0.0, max: 0.1}, max_tokens: 1024}
+  model_constraints: {temperature: {min: 0.0, max: 0.1}, max_tokens: 1024}

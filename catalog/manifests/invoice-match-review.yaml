@@ -1,0 +1,21 @@
+apiVersion: wigtn.agents/v1
+kind: action
+metadata:
+  name: invoice-match-review
+  version: 1
+  owner: agents
+  description: 송장 매칭 검토 · 모델이 읽기 도구를 최대 8회 골라 쓴 뒤 송장별 판정을 정해진 형식으로 낸다
+model: {ref: models/default, max_tokens: 4096}
+level: bounded-react
+harness_preset: standard
+skill: skill://erp/invoice-match@active
+prompts: {system: prompt://erp/system@active}
+gather: input
+writeback: jsonl
+output_schema:
+  type: object
+  properties:
+    exceptions: {type: array, description: "예외 송장 번호 목록"}
+    block_recommended: {type: array, description: "지급 보류를 권하는 송장 번호 목록"}
+    summary: {type: string, description: "한두 문장 요약"}
+  required: [exceptions, block_recommended, summary]

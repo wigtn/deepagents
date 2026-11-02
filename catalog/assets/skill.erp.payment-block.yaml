@@ -1,0 +1,32 @@
+kind: skill
+name: erp/payment-block
+version: 1
+status: active
+owner: agents
+description: 매칭 예외 송장 지급 보류 (쓰기 · 실행 승인 필수)
+inputs: {type: object, properties: {invoice: {type: string}, reason: {type: string}}, required: [invoice]}
+outputs: {type: object, properties: {payment_block: {type: object}}}
+permission_scope: [read:payables, write:payables]
+mutable_by_sel: [body.instruction, body.default_plan]
+provenance: {created_by: human}
+eval_cases:
+  - id: pb-001
+    input: {question: "매칭 예외 송장들 지급 보류 걸어줘"}
+    expected:
+      reference: "예외 송장 INV-V200-0915, INV-V200-0917, INV-V300-1102와 각각의 보류 사유를 보여 주고, 보류를 걸기 전에 승인을 요청합니다."
+    judge: llm
+    rubric:
+      pass_score: 0.75
+      criteria:
+        - {id: targets, description: "Lists the exception invoices INV-V200-0915, INV-V200-0917 and INV-V300-1102 as the ones to block.", weight: 2}
+        - {id: reasons, description: "Gives a reason per invoice based on the match result.", weight: 1}
+        - {id: approval, description: "Asks for or waits on approval before blocking, or reports that blocking is pending approval.", weight: 2}
+body:
+  trigger: "지급 보류 · 보류 해제 요청"
+  instruction: |
+    1. 대상 송장을 erp-three-way-match로 다시 확인하고, 보류 사유를 예외 유형으로 적는다.
+    2. 보류할 송장 목록과 사유를 사용자에게 보여 주고 승인을 요청한다.
+    3. 승인된 송장에만 erp-payment-block을 호출한다. 반려되면 아무것도 바꾸지 않고 끝낸다.
+    4. 결과로 보류된 송장 번호와 사유를 적는다.
+  tools: [tool://erp-period-status@active, tool://erp-three-way-match@active, tool://erp-payment-block@active]
+  default_plan: [tool://erp-three-way-match@active, tool://erp-payment-block@active]

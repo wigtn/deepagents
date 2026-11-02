@@ -38,7 +38,7 @@ def run_configurable(agent_id: str, **extra: Any) -> dict[str, Any]:
         "agent_id": agent_id,
         "session_type": "production",
         "entity": "1000",
-        "data_scope": ["view:default", "records:entity-1000"],
+        "data_scope": ["erp:read"],
     }
     base.update(extra)
     return base
@@ -91,7 +91,7 @@ async def wait_run(c: LangGraphClient, thread_id: str, run_id: str, timeout: flo
 
 def events_from_log(path: Optional[Path] = None) -> list[dict[str, Any]]:
     """Read the worker's JSONL event log (written by EventRecorderMiddleware)."""
-    log = path or ROOT / "var" / "events.jsonl"
+    log = path or Path(os.environ.get("WIGTN_AGENT_EVENT_LOG") or ROOT / "var" / "events.jsonl")
     if not log.exists():
         return []
     return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines() if line.strip()]

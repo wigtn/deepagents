@@ -1,0 +1,18 @@
+kind: tool
+name: erp-period-status
+version: 1
+status: active
+owner: platform
+description: 기준일 · 열린 회계기간 · 기간별 상태 조회
+permission_scope: [read:ledger]
+mutable_by_sel: []
+provenance: {created_by: human}
+body:
+  input_schema:
+    type: object
+    properties:
+      company: {type: string, description: "회사 코드. 실행 범위에서 시스템이 채운다"}
+  output_schema: {type: object, properties: {business_date: {type: string}, open_period: {type: string}}}
+  side_effect: read
+  idempotent: true
+  binding: {gateway_route: erp-period-status, api: api://erp-api@1, operation: "GET /periods"}

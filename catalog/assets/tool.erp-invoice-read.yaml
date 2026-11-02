@@ -1,0 +1,20 @@
+kind: tool
+name: erp-invoice-read
+version: 1
+status: active
+owner: platform
+description: 매입송장 조회. 금액 · 지급기일 · 지급 보류 여부
+permission_scope: [read:payables]
+mutable_by_sel: []
+provenance: {created_by: human}
+body:
+  input_schema:
+    type: object
+    properties:
+      company: {type: string, description: "회사 코드. 실행 범위에서 시스템이 채운다"}
+      invoice: {type: string, description: "송장 번호 (예: INV-V200-0915). 비우면 전체"}
+      vendor: {type: string, description: "공급사 코드"}
+  output_schema: {type: object, properties: {invoices: {type: array}}}
+  side_effect: read
+  idempotent: true
+  binding: {gateway_route: erp-invoice-read, api: api://erp-api@1, operation: "GET /vendor-invoices"}
