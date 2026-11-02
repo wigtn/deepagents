@@ -1,11 +1,12 @@
-"""Tool-asset → StructuredTool conversion and the offline gateway stand-in.
+"""Tool-asset → StructuredTool conversion and the gateway routes.
 
 The worker never holds connection details. A tool asset carries a binding: a gateway route,
 an HTTP operation on an ``api`` asset, or a tool on an MCP server.
 
-Gateway routes answered here: the sample ERP (``wigtn_agents.sample_erp``, the shipped catalog's
-tools), ``delegate-run`` (records the hand-off, the router's tool), and canned rows for the small
-"records" catalog the runtime tests use (``tests/fixtures/catalog``).
+Gateway routes answered here: the sample ERP (``wigtn_agents.sample_erp``), SAP FI on the
+read-only SAP sandbox with shadow postings (``wigtn_agents.sap_sandbox``), ``delegate-run``
+(records the router's hand-off), and canned rows for the small "records" catalog the runtime
+tests use (``tests/fixtures/catalog``).
 """
 
 from __future__ import annotations
@@ -74,8 +75,9 @@ FIXTURE_ROUTES: dict[str, RouteHandler] = {
 def default_routes() -> dict[str, RouteHandler]:
     """Every route a new gateway client answers (the sample ERP is shared by the process)."""
     from wigtn_agents.sample_erp import erp_routes
+    from wigtn_agents.sap_sandbox import sap_fi_routes
 
-    return {**FIXTURE_ROUTES, "delegate-run": _delegate_run, **erp_routes()}
+    return {**FIXTURE_ROUTES, "delegate-run": _delegate_run, **erp_routes(), **sap_fi_routes()}
 
 
 class ToolGatewayClient:

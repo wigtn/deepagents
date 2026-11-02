@@ -17,7 +17,7 @@ from wigtn_agents.runner import run_local
 from wigtn_agents.sample_erp import shared_erp
 from wigtn_agents.testing import ScriptedFakeModel
 
-AGENTS = ["erp-assistant", "ap-clerk", "inventory-planner", "close-accountant", "router"]
+AGENTS = ["erp-assistant", "ap-clerk", "inventory-planner", "close-accountant", "router", "sap-fi-accountant"]
 ACTIONS = ["close-readiness", "collections-priority", "invoice-match-review", "replenishment-proposal"]
 
 
@@ -33,7 +33,12 @@ def test_카탈로그에는_ERP_에이전트와_action이_있다(erp_catalog: Ca
 
 
 def test_회사_코드를_받는_ERP_도구는_모두_스코프_가드에_등록돼_있다() -> None:
-    for path in (SHIPPED_CATALOG_DIR / "assets").glob("tool.erp-*.yaml"):
+    paths = [
+        *(SHIPPED_CATALOG_DIR / "assets").glob("tool.erp-*.yaml"),
+        *(SHIPPED_CATALOG_DIR / "assets").glob("tool.sap-*.yaml"),
+    ]
+    assert len(paths) == 16
+    for path in paths:
         asset = yaml.safe_load(path.read_text(encoding="utf-8"))
         assert "company" in asset["body"]["input_schema"]["properties"], path.name
         assert SCOPE_PARAMS.get(asset["name"]) == (("company", "entity"),), path.name

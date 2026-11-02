@@ -1,0 +1,42 @@
+kind: skill
+name: sap-fi/lookup
+version: 1
+status: active
+owner: agents
+description: SAP FI 조회 (읽기 전용) — 회사 코드 · 계정과목 · 전표 · 계정 잔액
+inputs: {type: object, properties: {question: {type: string}}, required: [question]}
+outputs: {type: object, properties: {answer: {type: string}}}
+permission_scope: [read:sap-fi]
+mutable_by_sel: [body.instruction, body.default_plan]
+provenance: {created_by: human}
+eval_cases:
+  - id: sl-001
+    input: {question: "우리 회사 코드 기본 정보 알려줘"}
+    expected:
+      reference: "회사 코드의 이름, 국가, 통화, 계정과목표를 SAP에서 조회한 값 그대로 알려 줍니다."
+    judge: llm
+    rubric:
+      pass_score: 0.75
+      criteria:
+        - {id: fields, description: "Gives the company name, country, currency and chart of accounts.", weight: 2}
+        - {id: no-scope-question, description: "Does not ask the user which company code to use.", weight: 1}
+        - {id: grounded, description: "Presents values as looked up from SAP, not as guesses or examples.", weight: 1}
+  - id: sl-002
+    input: {question: "최근 전표 5줄 보여주고 차대가 맞는지 봐줘"}
+    expected:
+      reference: "가장 최근 전표 라인을 표로 보여 주고, 같은 전표 번호 안에서 차변과 대변 합계가 같은지 확인합니다."
+    judge: llm
+    rubric:
+      pass_score: 0.7
+      criteria:
+        - {id: table, description: "Shows recent journal entry lines with document number, account, debit/credit and amount.", weight: 2}
+        - {id: balance-check, description: "Checks debit vs credit per document and states the result, noting when only part of a document was shown.", weight: 2}
+        - {id: no-change, description: "Does not offer to post anything.", weight: 1}
+body:
+  trigger: "회사 코드 · 계정과목 · 전표 · 계정 잔액에 대한 질문"
+  instruction: |
+    1. 계정 번호를 모르면 sap-fi-gl-accounts에서 영어 이름으로 찾는다.
+    2. 전표나 잔액을 볼 때 회계연도를 모르면 sap-fi-journal-items로 최근 전표를 먼저 보고 그 연도를 쓴다.
+    3. 조회한 값을 표로 정리하고, 어느 전표 번호 · 계정에서 나온 값인지 적는다. source=shadow 줄은 그림자 원장 반영분이라고 표시한다.
+  tools: [tool://sap-fi-company@active, tool://sap-fi-gl-accounts@active, tool://sap-fi-journal-items@active, tool://sap-fi-account-balances@active]
+  default_plan: [tool://sap-fi-company@active]

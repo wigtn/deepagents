@@ -195,6 +195,18 @@ call, so the model never chooses it. A server process keeps one ERP: writes of o
 process restarts. The same tools can point at a real ERP over HTTP: each tool asset already names an operation on
 `api://erp-api@1`, so switching is `binding.type: http` plus `WIGTN_SECRET_ERP_BASE_URL`.
 
+### SAP FI on the SAP sandbox
+
+`sap-fi-accountant` works on real S/4HANA Cloud data: the SAP Business Accelerator Hub sandbox
+(`https://sandbox.api.sap.com/s4hanacloud`, OData v2, `SAP_SANDBOX_API_KEY`). Its reads are live: company code,
+G/L accounts of the company's chart of accounts, journal entry line items, account balances. The sandbox is
+read-only, so a posting is reflected in a shadow ledger instead (`var/sap-shadow.jsonl`). Before recording, it is
+checked against SAP master data: the company code exists, every account is in its chart of accounts, debits equal
+credits. The entry is recorded with the `JournalEntryBulkCreationRequest` payload a writable system would receive.
+Later reads add the shadow lines with `source: shadow`, so the agent sees its own posting the way it would on a
+writable system, and SAP stays unchanged. Use a sandbox company code as the run's entity
+(`--entity 1010`). Answers are cached per process, so repeated evals do not spend the sandbox quota.
+
 The runtime tests use a smaller fixed catalog (`tests/fixtures/catalog`), so they do not change when this one does.
 
 ## Layout
@@ -203,6 +215,7 @@ The runtime tests use a smaller fixed catalog (`tests/fixtures/catalog`), so the
 |---|---|
 | `catalog/assets/*.yaml` · `catalog/manifests/*.yaml` | Four asset kinds (prompt · skill · tool · api), five ERP agents and four ERP actions |
 | `src/wigtn_agents/sample_erp/` | The in-memory ERP the catalog's tools call: seed data, rules, gateway routes |
+| `src/wigtn_agents/sap_sandbox/` | SAP sandbox client, FI reads and the shadow ledger for postings |
 | `catalog/models.yaml` · `catalog/mcp.yaml` | Model alias registry · MCP servers (optional file) |
 | `src/wigtn_agents/assembly.py` | Agent lane: the only chat-lane `create_deep_agent` call site |
 | `src/wigtn_agents/actions/` | Action lane: chassis and ports |

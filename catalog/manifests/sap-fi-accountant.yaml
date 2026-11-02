@@ -1,0 +1,18 @@
+apiVersion: wigtn.agents/v1
+kind: agent
+metadata:
+  name: sap-fi-accountant
+  version: 1
+  owner: agents
+  worker_class: background
+  description: SAP FI 담당 · 샌드박스 실제 데이터 조회 · 전표 반영은 그림자 원장 (실행 승인 포함)
+model: {ref: models/default, temperature: 0.0, max_tokens: 4096}
+harness_preset: standard
+skills: [skill://sap-fi/lookup@active, skill://sap-fi/journal-post@active]
+prompts: {system: prompt://sap-fi/system@active}
+flow: {template: approval-gated}
+interrupts: {approve_before: [tool://sap-fi-journal-post@active]}
+permissions:
+  allow_tools: [tool://sap-fi-company@active, tool://sap-fi-gl-accounts@active, tool://sap-fi-journal-items@active, tool://sap-fi-account-balances@active, tool://sap-fi-journal-post@active]
+  data_scope: [sap-fi:read, sap-fi:shadow-write]
+sel: {mutable_by_sel: [skills]}

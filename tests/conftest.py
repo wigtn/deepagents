@@ -24,11 +24,16 @@ SHIPPED_CATALOG_DIR = ROOT / "catalog"
 
 
 @pytest.fixture(autouse=True)
-def _fixture_catalog(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+def _fixture_catalog(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[None]:
     from wigtn_agents.sample_erp import shared_erp
+    from wigtn_agents.sap_sandbox import fi
 
     monkeypatch.setenv("WIGTN_AGENT_CATALOG_DIR", str(CATALOG_DIR))
     shared_erp().reset()  # the process-wide sample ERP: every test starts from the seed data
+    # SAP sandbox: no key, no network, a shadow ledger per test (tests/test_sap_sandbox.py installs a mock)
+    monkeypatch.delenv("SAP_SANDBOX_API_KEY", raising=False)
+    monkeypatch.setenv("WIGTN_SAP_SHADOW_LOG", str(tmp_path / "sap-shadow.jsonl"))
+    monkeypatch.setitem(fi._shared, "fi", None)
     yield
 
 

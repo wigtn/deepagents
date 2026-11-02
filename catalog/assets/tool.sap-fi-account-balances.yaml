@@ -1,0 +1,22 @@
+kind: tool
+name: sap-fi-account-balances
+version: 1
+status: active
+owner: platform
+description: "SAP 계정별 차변 · 대변 · 순액 — 회계연도(와 기간) 기준, 그림자 원장 반영분 포함"
+permission_scope: [read:sap-fi]
+mutable_by_sel: []
+provenance: {created_by: human}
+body:
+  input_schema:
+    type: object
+    properties:
+      company: {type: string, description: "회사 코드. 실행 범위에서 시스템이 채운다"}
+      fiscal_year: {type: string, description: "회계연도 YYYY"}
+      fiscal_period: {type: string, description: "회계기간 1~16. 비우면 연간"}
+      accounts: {type: array, description: "계정 번호 목록. 비우면 전체"}
+    required: [fiscal_year]
+  output_schema: {type: object, properties: {accounts: {type: array}}}
+  side_effect: read
+  idempotent: true
+  binding: {gateway_route: sap-fi-account-balances, api: api://sap-sandbox@1, operation: "GET /API_JOURNALENTRYITEMBASIC_SRV/A_JournalEntryItemBasic"}

@@ -51,6 +51,12 @@ SCOPE_PARAMS: dict[str, tuple[tuple[str, str], ...]] = {
             "erp-journal-post",
             "erp-payment-block",
             "erp-requisition-create",
+            # SAP sandbox: the company code is the run's entity too (sandbox codes such as 1010, 1710)
+            "sap-fi-company",
+            "sap-fi-gl-accounts",
+            "sap-fi-journal-items",
+            "sap-fi-account-balances",
+            "sap-fi-journal-post",
         )
     },
 }

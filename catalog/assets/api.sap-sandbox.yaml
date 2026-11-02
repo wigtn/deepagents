@@ -1,0 +1,14 @@
+kind: api
+name: sap-sandbox
+version: 1
+status: active
+owner: platform
+description: SAP Business Accelerator Hub 샌드박스 (S/4HANA Cloud OData, 읽기 전용). 게이트웨이 라우트(sap_sandbox)가 호출한다
+permission_scope: [read:sap-fi, write:sap-fi]
+mutable_by_sel: []
+provenance: {created_by: human}
+body:
+  openapi_ref: "https://api.sap.com/package/SAPS4HANACloud/odata"
+  base_url_ref: "secret://sap/sandbox-base-url"
+  credential_ref: "secret://sap/sandbox-api-key"
+  rate_limit: {requests_per_minute: 60}

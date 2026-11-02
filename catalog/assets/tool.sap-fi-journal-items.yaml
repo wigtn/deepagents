@@ -1,0 +1,23 @@
+kind: tool
+name: sap-fi-journal-items
+version: 1
+status: active
+owner: platform
+description: "SAP 전표 라인 조회 — 최근 전기일 순. 그림자 원장에 반영한 전표는 source=shadow로 함께 나온다"
+permission_scope: [read:sap-fi]
+mutable_by_sel: []
+provenance: {created_by: human}
+body:
+  input_schema:
+    type: object
+    properties:
+      company: {type: string, description: "회사 코드. 실행 범위에서 시스템이 채운다"}
+      fiscal_year: {type: string, description: "회계연도 YYYY"}
+      fiscal_period: {type: string, description: "회계기간 1~16"}
+      account: {type: string, description: "계정 번호"}
+      document: {type: string, description: "전표 번호"}
+      top: {type: integer, description: "최대 줄 수 (기본 50)"}
+  output_schema: {type: object, properties: {items: {type: array}}}
+  side_effect: read
+  idempotent: true
+  binding: {gateway_route: sap-fi-journal-items, api: api://sap-sandbox@1, operation: "GET /API_JOURNALENTRYITEMBASIC_SRV/A_JournalEntryItemBasic"}

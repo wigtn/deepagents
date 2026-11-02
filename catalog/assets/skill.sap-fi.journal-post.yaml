@@ -1,0 +1,33 @@
+kind: skill
+name: sap-fi/journal-post
+version: 1
+status: active
+owner: agents
+description: SAP 전표 작성과 그림자 원장 반영 (쓰기 · 실행 승인 필수)
+inputs: {type: object, properties: {request: {type: string}}, required: [request]}
+outputs: {type: object, properties: {document: {type: string}}}
+permission_scope: [read:sap-fi, write:sap-fi]
+mutable_by_sel: [body.instruction]
+provenance: {created_by: human}
+eval_cases:
+  - id: sp-001
+    input: {question: "임차료 1,000 현금으로 지급한 전표 올려줘"}
+    expected:
+      reference: "SAP 계정과목에서 임차료 비용 계정과 은행/현금 계정을 찾아 차변 임차료 1,000 / 대변 은행 1,000 초안을 보여 주고, 승인 후 그림자 원장에 반영한다고 안내합니다."
+    judge: llm
+    rubric:
+      pass_score: 0.75
+      criteria:
+        - {id: real-accounts, description: "Uses account numbers that were looked up from SAP (it names them with their SAP account names), not invented ones.", weight: 3}
+        - {id: entry, description: "Drafts debit rent expense 1,000 and credit cash/bank 1,000.", weight: 2}
+        - {id: approval, description: "Asks for or waits on approval before posting, or reports the posting is pending approval.", weight: 2}
+        - {id: shadow, description: "Does not claim SAP itself was changed; says the sandbox is read-only or that the entry goes to the shadow ledger.", weight: 1}
+body:
+  trigger: "전표 반영 · 전기 · 분개 요청"
+  instruction: |
+    1. sap-fi-gl-accounts로 필요한 계정을 찾는다 (영어 이름: Rent, Bank, Depreciation, Accrued 등). 후보가 여럿이면 이름이 가장 맞는 계정을 고르고 근거를 적는다.
+    2. 계정 번호 · 계정 이름 · 차변 · 대변 · 금액 · 적요 · 전기일을 표로 보여 주고, 차변 합계와 대변 합계가 같은지 확인한 뒤 승인을 요청한다.
+    3. 승인된 전표만 sap-fi-journal-post로 반영한다. 한 번에 한 전표씩 반영한다.
+    4. 결과로 그림자 전표 번호를 적고, SAP 샌드박스 자체는 바뀌지 않았다는 점과 이후 조회에 source=shadow로 보인다는 점을 밝힌다.
+  tools: [tool://sap-fi-gl-accounts@active, tool://sap-fi-journal-post@active]
+  default_plan: [tool://sap-fi-gl-accounts@active, tool://sap-fi-journal-post@active]
