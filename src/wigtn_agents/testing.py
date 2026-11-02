@@ -7,6 +7,8 @@ restarts, the action lane) can be exercised offline. It is not a substitute for 
 
 Script: (1) call ``record-read`` if bound, (2) call ``record-write`` if the user asks to post,
 (3) if an action result tool is bound, call it with placeholder values, (4) answer in text.
+On the sample ERP catalog the same script reads with the first bound tool of ``ERP_READS`` and,
+when asked to post, posts the first journal proposal of the close checklist.
 Structured-output calls return placeholder values for every field of the schema.
 """
 
@@ -67,6 +69,35 @@ def _json_type(spec: dict[str, Any]) -> type:
     return str
 
 
+ERP_READS: tuple[str, ...] = (
+    "erp-close-checklist",
+    "erp-three-way-match",
+    "erp-stock-read",
+    "erp-ar-aging",
+    "erp-period-status",
+)
+POST_WORDS: tuple[str, ...] = ("반영", "전기", "올려", "post", "update")
+
+
+def _journal_proposal(messages: list[BaseMessage]) -> dict[str, Any]:
+    """Arguments for ``erp-journal-post`` from the last close checklist the run read."""
+    import json
+
+    for message in reversed(messages):
+        if isinstance(message, ToolMessage) and message.name == "erp-close-checklist":
+            try:
+                checks = json.loads(message.text).get("checks", [])
+            except ValueError:
+                break
+            for check in checks:
+                if check.get("proposal"):
+                    return {"text": check["detail"][:60], "lines": check["proposal"]["lines"]}
+    return {
+        "text": "Monthly depreciation",
+        "lines": [{"account": "6300", "debit": 2_400_000}, {"account": "1590", "credit": 2_400_000}],
+    }
+
+
 class ScriptedFakeModel(BaseChatModel):
     """Deterministic script over the bound tools; see the module docstring."""
 
@@ -115,7 +146,13 @@ class ScriptedFakeModel(BaseChatModel):
         humans = [m for m in messages if isinstance(m, HumanMessage)]
         tools_done = [m.name for m in messages if isinstance(m, ToolMessage)]
         last_user = humans[-1].text if humans else ""
-        wants_post = any(k in last_user for k in ("반영", "post", "update"))
+        wants_post = any(k in last_user for k in POST_WORDS)
+        erp_read = next((n for n in ERP_READS if n in self.bound), None)
+        if erp_read and erp_read not in tools_done:
+            return AIMessage(content="", tool_calls=[{"name": erp_read, "args": {}, "id": "call-erp-read"}])
+        if wants_post and "erp-journal-post" in self.bound and "erp-journal-post" not in tools_done:
+            args = _journal_proposal(messages)
+            return AIMessage(content="", tool_calls=[{"name": "erp-journal-post", "args": args, "id": "call-erp-post"}])
 
         if "record-read" in self.bound and "record-read" not in tools_done:
             return AIMessage(
@@ -138,10 +175,10 @@ class ScriptedFakeModel(BaseChatModel):
         if RESULT_TOOL in self.bound and RESULT_TOOL not in tools_done:
             args = placeholder_values(self.bound_schemas.get(RESULT_TOOL))
             return AIMessage(content="", tool_calls=[{"name": RESULT_TOOL, "args": args, "id": "call-result"}])
-        posted = [m for m in messages if isinstance(m, ToolMessage) and m.name == "record-write"]
+        posted = [m for m in messages if isinstance(m, ToolMessage) and m.name in ("record-write", "erp-journal-post")]
         if posted:
             return AIMessage(content=f"반영 완료. 결과: {posted[-1].content}")
-        read = [m for m in messages if isinstance(m, ToolMessage) and m.name == "record-read"]
+        read = [m for m in messages if isinstance(m, ToolMessage) and m.name in ("record-read", *ERP_READS)]
         if read:
             return AIMessage(content=f"조회 완료. 미처리 기록 요약: {read[-1].content[:120]}")
         return AIMessage(content=f"(fake) 요청을 받았습니다: {last_user[:80]}")

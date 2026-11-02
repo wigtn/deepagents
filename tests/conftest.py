@@ -16,7 +16,20 @@ from wigtn_agents.context import RunContext, default_context
 from wigtn_agents.tools.gateway import ToolGatewayClient
 
 ROOT = Path(__file__).resolve().parents[1]
-CATALOG_DIR = ROOT / "catalog"
+# The runtime tests run on a small fixed catalog (an example "records" domain) so they do not
+# change when the shipped catalog (catalog/, the ERP agents) does. models.yaml is a link to the
+# shipped registry. tests/test_erp_catalog.py covers the shipped catalog.
+CATALOG_DIR = ROOT / "tests" / "fixtures" / "catalog"
+SHIPPED_CATALOG_DIR = ROOT / "catalog"
+
+
+@pytest.fixture(autouse=True)
+def _fixture_catalog(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    from wigtn_agents.sample_erp import shared_erp
+
+    monkeypatch.setenv("WIGTN_AGENT_CATALOG_DIR", str(CATALOG_DIR))
+    shared_erp().reset()  # the process-wide sample ERP: every test starts from the seed data
+    yield
 
 
 class RecordingFakeModel(GenericFakeChatModel):

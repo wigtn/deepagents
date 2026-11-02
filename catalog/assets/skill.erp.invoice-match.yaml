@@ -1,0 +1,37 @@
+kind: skill
+name: erp/invoice-match
+version: 1
+status: active
+owner: agents
+description: 매입송장 3-way 매칭 점검 (읽기 전용)
+inputs: {type: object, properties: {invoice: {type: string}}}
+outputs: {type: object, properties: {exceptions: {type: array}}}
+permission_scope: [read:payables, read:purchasing]
+mutable_by_sel: [body.instruction, body.default_plan]
+provenance: {created_by: human}
+eval_cases:
+  - id: im-001
+    input: {question: "10월 매입송장 3-way 매칭 돌려서 예외 정리해줘"}
+    expected: {contains: ["INV-V200-0915", "INV-V200-0917", "INV-V300-1102"]}
+    judge: contains
+  - id: im-002
+    input: {question: "INV-V200-0917 이상한 점 있어?"}
+    expected:
+      reference: "INV-V200-0917은 INV-V200-0915와 공급사 · 구매오더 · 수량 · 단가가 같아 중복 의심이고, 누적 송장 수량 2,000이 입고 1,000을 넘으며, 단가 3,350원이 발주 단가 3,200원보다 4.69% 높아 허용 범위 2%를 넘습니다. 지급 보류를 제안합니다."
+    judge: llm
+    rubric:
+      pass_score: 0.75
+      criteria:
+        - {id: duplicate, description: "Identifies INV-V200-0917 as a possible duplicate of INV-V200-0915.", weight: 3}
+        - {id: quantity, description: "Says invoiced quantity (2,000 to date) exceeds received quantity (1,000).", weight: 2}
+        - {id: price, description: "Mentions the price variance (3,350 vs 3,200, about 4.7%, over the 2% tolerance).", weight: 1}
+        - {id: no-false-claim, description: "Does not claim a payment block was already set.", weight: 2}
+body:
+  trigger: "송장 점검 · 3-way 매칭 · 단가 차이 · 중복 송장 확인"
+  instruction: |
+    1. erp-three-way-match로 송장을 대조한다. 특정 송장을 물으면 그 송장만 본다.
+    2. 예외 송장마다 유형(단가 차이 · 수량 초과 · 중복 의심)과 금액 영향을 정리한다. 단가 차이는 허용 범위(%)와 실제 차이를 함께 적는다.
+    3. 원인을 판단하기 어려우면 erp-po-read · erp-invoice-read로 구매오더와 송장 원본을 확인한다.
+    4. 예외 송장은 지급 보류가 필요한지 제안한다. 이 단계에서는 보류를 걸지 않는다.
+  tools: [tool://erp-period-status@active, tool://erp-three-way-match@active, tool://erp-invoice-read@active, tool://erp-po-read@active]
+  default_plan: [tool://erp-three-way-match@active]

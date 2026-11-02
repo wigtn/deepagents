@@ -1,9 +1,9 @@
 """Run the eval cases an agent's or action's assets carry, in-process, and write a report.
 
-    PYTHONPATH=src uv run python scripts/eval.py records-guide
-    PYTHONPATH=src uv run python scripts/eval.py records-summary --model models/qwen3.8-flash --batch backbone-qwen
-    PYTHONPATH=src uv run python scripts/eval.py records-guide --judge-model models/<other>
-    PYTHONPATH=src uv run python scripts/eval.py records-guide --model models/fake --no-llm   # offline
+    PYTHONPATH=src uv run python scripts/eval.py erp-assistant
+    PYTHONPATH=src uv run python scripts/eval.py close-accountant --model models/gpt-oss-120b --batch backbone-gpt-oss
+    PYTHONPATH=src uv run python scripts/eval.py ap-clerk --model models/deepseek-v3.2 --judge-model models/gemma-4-31b
+    PYTHONPATH=src uv run python scripts/eval.py erp-assistant --model models/fake --no-llm   # offline
 
 Each skill and prompt asset can carry ``eval_cases`` (input, expected, judge). The cases of every
 asset the manifest reaches run once each with ``session_type=evaluation`` and one ``batch_id``,

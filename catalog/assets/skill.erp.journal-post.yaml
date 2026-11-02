@@ -1,0 +1,32 @@
+kind: skill
+name: erp/journal-post
+version: 1
+status: active
+owner: agents
+description: 마감 전표 작성과 전기 (쓰기 · 실행 승인 필수)
+inputs: {type: object, properties: {period: {type: string}}}
+outputs: {type: object, properties: {document: {type: string}}}
+permission_scope: [read:ledger, write:ledger]
+mutable_by_sel: [body.instruction, body.default_plan]
+provenance: {created_by: human}
+eval_cases:
+  - id: jp-001
+    input: {question: "10월 감가상각 전표 올려줘"}
+    expected:
+      reference: "차변 6300 감가상각비 2,400,000원 / 대변 1590 감가상각누계액 2,400,000원 전표 초안을 보여 주고, 전기 전에 승인을 요청합니다."
+    judge: llm
+    rubric:
+      pass_score: 0.75
+      criteria:
+        - {id: entry, description: "Drafts debit 6300 (depreciation) and credit 1590 (accumulated depreciation) for 2,400,000.", weight: 3}
+        - {id: approval, description: "Asks for or waits on approval before posting, or reports the posting is pending approval.", weight: 2}
+        - {id: no-false-claim, description: "Does not claim the entry was posted unless a document number from the ERP is shown.", weight: 1}
+body:
+  trigger: "전표 전기 · 감가상각 · 미지급비용 계상"
+  instruction: |
+    1. erp-close-checklist의 전표 제안(proposal)을 전표 초안으로 옮긴다. 계정 · 차변 · 대변 · 금액 · 적요를 표로 보여 준다.
+    2. 차변 합계와 대변 합계가 같은지 확인하고 승인을 요청한다.
+    3. 승인된 전표만 erp-journal-post로 전기한다. 한 번에 한 전표씩 전기한다.
+    4. ERP가 거부하면 사유를 전하고 전표를 고쳐 다시 승인받는다. 결과로 전표 번호를 적는다.
+  tools: [tool://erp-period-status@active, tool://erp-close-checklist@active, tool://erp-journal-post@active]
+  default_plan: [tool://erp-close-checklist@active, tool://erp-journal-post@active]

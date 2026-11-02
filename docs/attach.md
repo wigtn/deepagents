@@ -25,14 +25,14 @@ client = get_client(url="http://localhost:2026")
 thread = await client.threads.create()
 await client.runs.wait(
     thread["thread_id"],
-    assistant_id,  # uuid5 of "records-guide"
-    input={"messages": [{"role": "user", "content": "8월 기록 점검"}]},
+    assistant_id,  # uuid5 of "erp-assistant"
+    input={"messages": [{"role": "user", "content": "재주문점 아래로 떨어진 자재 있어?"}]},
     config={
         "configurable": {
-            "agent_id": "records-guide",
+            "agent_id": "erp-assistant",
             "batch_id": "sweep-01",  # stamped on every event row
             "session_type": "evaluation",  # production | evaluation | test
-            "entity": "1000",  # scope the scope guard injects (configurable wins over context)
+            "entity": "1000",  # company code the scope guard injects (configurable wins over context)
             "model": "models/gpt-oss-120b",  # optional: another registered alias
             "middleware": ["my-defense"],  # optional: registered extra middleware
         }
@@ -52,16 +52,16 @@ A tool asset keeps its own `input_schema`; the binding only says where the call 
 
 ```yaml
 # HTTP: base URL and credential come from the api asset's secret:// references
-binding: {type: http, api: api://records-api@1, operation: "GET /records/{record_id}"}
+binding: {type: http, api: api://erp-api@1, operation: "GET /vendor-invoices/{invoice}"}
 
 # MCP: a tool on a server listed in catalog/mcp.yaml
 binding: {type: mcp, server: docs, tool: search}
 
 # Gateway: a named route on the offline stub (tests, demos)
-binding: {type: gateway, gateway_route: record-read}
+binding: {type: gateway, gateway_route: erp-stock-read}
 ```
 
-`secret://records/base-url` is read from `WIGTN_SECRET_RECORDS_BASE_URL` at call time, never stored. A credential is
+`secret://erp/base-url` is read from `WIGTN_SECRET_ERP_BASE_URL` at call time, never stored. A credential is
 sent as `Authorization: Bearer <value>`. Path parameters come from the tool arguments; the other arguments go to the
 query string (GET, DELETE) or the JSON body. An HTTP error comes back to the model as a tool error.
 

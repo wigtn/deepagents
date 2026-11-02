@@ -1,0 +1,37 @@
+kind: skill
+name: erp/ar-review
+version: 1
+status: active
+owner: agents
+description: 매출채권 연령 · 여신 점검과 회수 우선순위 (읽기 전용)
+inputs: {type: object, properties: {customer: {type: string}}}
+outputs: {type: object, properties: {priorities: {type: array}}}
+permission_scope: [read:receivables]
+mutable_by_sel: [body.instruction, body.default_plan]
+provenance: {created_by: human}
+eval_cases:
+  - id: ar-001
+    input: {question: "여신 한도 넘은 고객 있어?"}
+    expected: {contains: ["C-510", "3,000,000"]}
+    judge: contains
+  - id: ar-002
+    input: {question: "채권 회수 우선순위 정리해줘"}
+    expected:
+      reference: "C-520의 90일 초과 3,000,000원(AR-9020), C-510의 61-90일 18,000,000원(AR-9010)과 31-60일 9,000,000원(AR-9011), C-500의 1-30일 12,000,000원(AR-9001) 순으로 회수하고, C-510은 한도를 3,000,000원 넘었습니다."
+    judge: llm
+    rubric:
+      pass_score: 0.7
+      criteria:
+        - {id: oldest-first, description: "Puts the oldest overdue items first: C-520's 90+ item and C-510's 61-90 item ahead of 1-30 items.", weight: 2}
+        - {id: over-limit, description: "Flags C-510 as over its credit limit by 3,000,000.", weight: 2}
+        - {id: invoices, description: "Names the overdue invoice numbers (AR-9020, AR-9010, AR-9011, AR-9001).", weight: 1}
+        - {id: no-current, description: "Does not list not-yet-due items (AR-9002, AR-9012) as overdue.", weight: 1}
+body:
+  trigger: "채권 연령 분석 · 연체 · 여신 한도 · 회수 우선순위"
+  instruction: |
+    1. erp-ar-aging으로 고객별 연체 구간과 여신 한도 사용을 본다.
+    2. 여신 한도를 넘은 고객과 초과 금액을 먼저 적는다.
+    3. 회수 우선순위는 오래 연체된 구간(90+ → 61-90 → 31-60 → 1-30) 금액이 큰 순서로 정하고, 고객마다 연체 송장 번호를 적는다.
+    4. 신규 출하 보류 같은 조치는 제안만 한다.
+  tools: [tool://erp-period-status@active, tool://erp-ar-aging@active]
+  default_plan: [tool://erp-ar-aging@active]

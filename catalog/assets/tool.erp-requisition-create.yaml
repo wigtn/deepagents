@@ -1,0 +1,21 @@
+kind: tool
+name: erp-requisition-create
+version: 1
+status: active
+owner: platform
+description: 구매요청 생성 (쓰기 · 실행 승인 필수)
+permission_scope: [write:purchasing]
+mutable_by_sel: []
+provenance: {created_by: human}
+body:
+  input_schema:
+    type: object
+    properties:
+      company: {type: string, description: "회사 코드. 실행 범위에서 시스템이 채운다"}
+      lines: {type: array, description: "요청 줄 목록. 각 줄은 {material, qty}"}
+      note: {type: string, description: "요청 사유"}
+    required: [lines]
+  output_schema: {type: object, properties: {requisition: {type: string}}}
+  side_effect: write
+  idempotent: false
+  binding: {gateway_route: erp-requisition-create, api: api://erp-api@1, operation: "POST /purchase-requisitions"}

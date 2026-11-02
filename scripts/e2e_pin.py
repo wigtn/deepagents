@@ -1,6 +1,6 @@
-"""e2e (d): activating skill v4 mid-thread does not change a thread pinned at v3.
+"""e2e (d): activating skill v2 mid-thread does not change a thread pinned at v1.
 
-Edits the catalog files in place (v3 → retired, adds v4 active) and restores them at the end.
+Edits the catalog files in place (v1 → retired, adds v2 active) and restores them at the end.
 The worker re-reads the catalog when file mtimes change, without a restart.
 """
 
@@ -13,20 +13,21 @@ import yaml
 
 from e2e_common import ROOT, assistant_id_for, check, client, run_configurable, wait_run
 
-AGENT_ID = "records-guide"
-V3 = ROOT / "catalog" / "assets" / "skill.example.checklist.yaml"
-V4 = ROOT / "catalog" / "assets" / "skill.example.checklist.v4.yaml"
-BACKUP = ROOT / "var" / "skill.example.checklist.yaml.bak"
+AGENT_ID = "erp-assistant"
+SKILL = "skill://erp/lookup@active"
+V3 = ROOT / "catalog" / "assets" / "skill.erp.lookup.yaml"  # pinned version (v1)
+V4 = ROOT / "catalog" / "assets" / "skill.erp.lookup.v2.yaml"  # the version activated mid-thread
+BACKUP = ROOT / "var" / "skill.erp.lookup.yaml.bak"
 
 
 def activate_v4() -> None:
-    """v3 retired, v4 active (immutable versions: v4 is a new file)."""
+    """v1 retired, v2 active (immutable versions: v2 is a new file)."""
     BACKUP.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(V3, BACKUP)
     data = yaml.safe_load(V3.read_text(encoding="utf-8"))
     v4 = dict(data)
-    v4["version"] = 4
-    v4["description"] = data.get("description", "") + " (v4)"
+    v4["version"] = 2
+    v4["description"] = data.get("description", "") + " (v2)"
     V4.write_text(yaml.safe_dump(v4, allow_unicode=True, sort_keys=False), encoding="utf-8")
     data["status"] = "retired"
     V3.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
@@ -54,21 +55,21 @@ async def one_turn(thread_id: str, text: str) -> dict:
 
 
 async def main() -> None:
-    """Pin on thread A at v3, activate v4, continue A (still v3), start B (v4)."""
+    """Pin on thread A at v1, activate v2, continue A (still v1), start B (v2)."""
     c = client()
     a = (await c.threads.create())["thread_id"]
-    values = await one_turn(a, "8월 기록 점검 (범위 1000)")
-    check(values["asset_versions"]["skill://example/checklist@active"].endswith("@3"), "thread A pinned @3")
+    values = await one_turn(a, "PO-4500000103 입고 얼마나 됐어?")
+    check(values["asset_versions"][SKILL].endswith("@1"), "thread A pinned @1")
     try:
         activate_v4()
         values = await one_turn(a, "이어서 진행해줘")
         check(
-            values["asset_versions"]["skill://example/checklist@active"].endswith("@3"),
-            "thread A still @3 after v4 went active",
+            values["asset_versions"][SKILL].endswith("@1"),
+            "thread A still @1 after v2 went active",
         )
         b = (await c.threads.create())["thread_id"]
-        values_b = await one_turn(b, "새 스레드에서 점검")
-        check(values_b["asset_versions"]["skill://example/checklist@active"].endswith("@4"), "new thread B pins @4")
+        values_b = await one_turn(b, "새 스레드에서 조회")
+        check(values_b["asset_versions"][SKILL].endswith("@2"), "new thread B pins @2")
     finally:
         restore()
         print("catalog restored")

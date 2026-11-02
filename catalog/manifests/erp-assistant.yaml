@@ -1,0 +1,17 @@
+apiVersion: wigtn.agents/v1
+kind: agent
+metadata:
+  name: erp-assistant
+  version: 1
+  owner: agents
+  worker_class: interactive
+  description: ERP 조회 · 질의응답 · 읽기 전용 · 대화형
+model: {ref: models/default, temperature: 0.1, max_tokens: 2048}
+harness_preset: standard
+skills: [skill://erp/lookup@active]
+prompts: {system: prompt://erp/system@active}
+flow: {template: react}
+permissions:
+  allow_tools: [tool://erp-period-status@active, tool://erp-po-read@active, tool://erp-invoice-read@active, tool://erp-stock-read@active, tool://erp-ar-aging@active, tool://erp-trial-balance@active]
+  data_scope: [erp:read]
+sel: {mutable_by_sel: []}

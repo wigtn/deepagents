@@ -1,9 +1,9 @@
 """Run one agent or action — through Aegra (default) or in-process (``--local``).
 
-    PYTHONPATH=src uv run python scripts/run.py records-guide "8월 기록 점검 부탁해"
-    PYTHONPATH=src uv run python scripts/run.py records-summary '{"period": "2026-08", "view": "open-items"}'
-    PYTHONPATH=src uv run python scripts/run.py records-guide "점검" --local --model models/fake
-    PYTHONPATH=src uv run python scripts/run.py records-writer "8월 기록 반영" --batch exp-1 --middleware my-defense
+    PYTHONPATH=src uv run python scripts/run.py erp-assistant "재주문점 아래로 떨어진 자재 있어?"
+    PYTHONPATH=src uv run python scripts/run.py close-readiness '{}'
+    PYTHONPATH=src uv run python scripts/run.py ap-clerk "INV-V200-0917 확인" --local --model models/gpt-oss-120b
+    PYTHONPATH=src uv run python scripts/run.py close-accountant "감가상각 전표 올려줘" --local --approve --batch exp-1
 
 Whether the name is an agent or an action comes from the catalog. An agent takes text, an action
 takes a JSON object. ``--model`` and ``--middleware`` select from what the image already has

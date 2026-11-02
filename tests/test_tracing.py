@@ -40,6 +40,15 @@ def test_LangSmith_OTLP_엔드포인트와_헤더() -> None:
         {"LANGSMITH_API_KEY": "k", "LANGSMITH_OTEL_ENDPOINT": "https://eu.example/otel/v1/traces"}
     )
     assert eu._endpoint == "https://eu.example/otel/v1/traces" and "Langsmith-Project" not in eu._headers
+    regional: Any = langsmith_exporter({"LANGSMITH_API_KEY": "k", "LANGSMITH_ENDPOINT": "https://aws.example/"})
+    assert regional._endpoint == "https://aws.example/otel/v1/traces"
+
+
+def test_Phoenix_주소에_OTLP_경로가_없으면_거부한다() -> None:
+    with pytest.raises(TracingConfigError, match="/s/me/v1/traces"):
+        check_config({"OTEL_TARGETS": "PHOENIX", "PHOENIX_COLLECTOR_ENDPOINT": "https://phoenix.example/s/me/"})
+    ok = {"OTEL_TARGETS": "PHOENIX", "PHOENIX_COLLECTOR_ENDPOINT": "https://phoenix.example/s/me/v1/traces"}
+    assert check_config(ok) == ["PHOENIX"]
 
 
 def test_서버는_LangSmith_대상을_Aegra_provider에_붙인다(monkeypatch: pytest.MonkeyPatch) -> None:

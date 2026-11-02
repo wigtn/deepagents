@@ -1,0 +1,20 @@
+kind: tool
+name: delegate-run
+version: 1
+status: active
+owner: platform
+description: 게이트웨이 runs로 다른 에이전트에 위임 (router 전용)
+permission_scope: [invoke:agent]
+mutable_by_sel: []
+provenance: {created_by: human}
+body:
+  input_schema:
+    type: object
+    properties:
+      agent_id: {type: string}
+      input: {type: string}
+    required: [agent_id, input]
+  output_schema: {type: object, properties: {run_id: {type: string}}}
+  side_effect: read
+  idempotent: false
+  binding: {gateway_route: delegate-run, operation: "POST /threads/{thread_id}/runs"}

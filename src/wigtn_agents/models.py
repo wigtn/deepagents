@@ -63,6 +63,8 @@ class ModelEntry(BaseModel):
     provider: Provider
     model: str
     api: Literal["responses", "chat"] = "chat"
+    # Endpoint: a fixed public URL (``base_url``) or a variable holding it (``base_url_env``, wins).
+    base_url: Optional[str] = None
     base_url_env: Optional[str] = None
     api_key_env: Optional[str] = None
     price: Optional[Price] = None
@@ -74,8 +76,8 @@ class ModelEntry(BaseModel):
         unknown = [p for p in self.accepts if p not in MANIFEST_PARAMS]
         if unknown:
             raise ValueError(f"accepts에 알 수 없는 파라미터가 있습니다: {unknown}")
-        if self.provider == "openai-compatible" and not self.base_url_env:
-            raise ValueError("openai-compatible 모델은 base_url_env가 필요합니다")
+        if self.provider == "openai-compatible" and not (self.base_url or self.base_url_env):
+            raise ValueError("openai-compatible 모델은 base_url이나 base_url_env가 필요합니다")
         if self.api == "responses" and self.provider != "openai":
             raise ValueError("Responses API는 provider openai에서만 씁니다")
         return self
@@ -208,10 +210,12 @@ def build_model(
 
         compatible = entry.provider == "openai-compatible"
         connection: dict[str, Any] = {}
-        base_url = _env(entry.base_url_env, required=compatible, alias=resolved.alias)
+        base_url = _env(entry.base_url_env, required=compatible and not entry.base_url, alias=resolved.alias)
+        base_url = base_url or entry.base_url
         if base_url:
             connection["base_url"] = base_url
-        api_key = _env(entry.api_key_env, required=False, alias=resolved.alias)
+        # A hosted endpoint (fixed base_url) needs its key; a local vLLM accepts any.
+        api_key = _env(entry.api_key_env, required=bool(entry.base_url), alias=resolved.alias)
         if api_key:
             connection["api_key"] = api_key
         elif compatible:

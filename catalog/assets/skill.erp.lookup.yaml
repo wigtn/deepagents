@@ -1,0 +1,47 @@
+kind: skill
+name: erp/lookup
+version: 1
+status: active
+owner: agents
+description: ERP 데이터 조회 · 질의응답 (읽기 전용)
+inputs: {type: object, properties: {question: {type: string}}, required: [question]}
+outputs: {type: object, properties: {answer: {type: string}}}
+permission_scope: [read:purchasing, read:payables, read:inventory, read:receivables, read:ledger]
+mutable_by_sel: [body.instruction, body.default_plan]
+provenance: {created_by: human}
+eval_cases:
+  - id: lk-001
+    input: {question: "PO-4500000103 입고 얼마나 됐어?"}
+    expected: {contains: ["1,500"]}
+    judge: contains
+  - id: lk-002
+    input: {question: "10월 시산표 차대 맞아?"}
+    expected:
+      reference: "2026-10 시산표의 차변 합계와 대변 합계가 143,780,000원으로 같아 균형이 맞습니다."
+    judge: llm
+    rubric:
+      pass_score: 0.7
+      criteria:
+        - {id: balanced, description: "States that the October 2026 trial balance is balanced.", weight: 2}
+        - {id: figure, description: "Gives the total debit/credit of 143,780,000 (any thousands formatting).", weight: 2}
+        - {id: no-change, description: "Does not offer to post or change anything.", weight: 1}
+  - id: lk-003
+    input: {question: "재고 현황 좀 봐줘"}
+    expected:
+      reference: "회사 코드를 묻지 않고 바로 재고를 조회해, 재주문점 아래인 자재와 숫자를 근거로 답합니다."
+    judge: llm
+    rubric:
+      pass_score: 0.75
+      criteria:
+        - {id: no-scope-question, description: "Does not ask the user for a company code or scope; it answers for the current company.", weight: 2}
+        - {id: grounded, description: "Cites concrete figures (quantities, material codes) that come from a lookup, not made-up examples.", weight: 2}
+        - {id: concise, description: "Leads with the answer and keeps the explanation short.", weight: 1}
+body:
+  trigger: "구매오더 · 송장 · 재고 · 채권 · 시산표에 대한 질문"
+  instruction: |
+    1. 질문이 어느 영역(구매 · 매입 · 재고 · 채권 · 원장)인지 정한다.
+    2. 그 영역의 조회 도구로 필요한 만큼만 조회한다. 기간이 필요하면 erp-period-status로 열린 기간을 확인하고, 기간 인자는 그 값(YYYY-MM)을 쓴다.
+    3. 조회한 숫자로 답하고, 어느 문서 번호나 코드에서 나온 값인지 적는다.
+    4. 데이터를 바꾸는 요청이면 직접 처리하지 않고, 담당 에이전트(ap-clerk · inventory-planner · close-accountant)가 할 일이라고 안내한다.
+  tools: [tool://erp-period-status@active, tool://erp-po-read@active, tool://erp-invoice-read@active, tool://erp-stock-read@active, tool://erp-ar-aging@active, tool://erp-trial-balance@active]
+  default_plan: [tool://erp-period-status@active]

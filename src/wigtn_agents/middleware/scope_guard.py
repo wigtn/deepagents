@@ -30,10 +30,29 @@ ToolHandler = Callable[[ToolCallRequest], ToolResult]
 AsyncToolHandler = Callable[[ToolCallRequest], Awaitable[ToolResult]]
 
 # tool name → (arg name, context key). Registration is the protection; tests check coverage.
+_COMPANY = (("company", "entity"),)
 SCOPE_PARAMS: dict[str, tuple[tuple[str, str], ...]] = {
+    # tests/fixtures/catalog
     "record-read": (("entity", "entity"),),
     "record-write": (("entity", "entity"),),
     "view-read": (("entity", "entity"),),
+    # catalog/ (sample ERP): the company code is the run's entity
+    **{
+        name: _COMPANY
+        for name in (
+            "erp-period-status",
+            "erp-po-read",
+            "erp-invoice-read",
+            "erp-three-way-match",
+            "erp-stock-read",
+            "erp-ar-aging",
+            "erp-trial-balance",
+            "erp-close-checklist",
+            "erp-journal-post",
+            "erp-payment-block",
+            "erp-requisition-create",
+        )
+    },
 }
 
 

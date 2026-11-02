@@ -1,8 +1,11 @@
 """Tool-asset → StructuredTool conversion and the offline gateway stand-in.
 
-The worker never holds connection details. A tool asset carries a binding: a gateway route
-(the stub below answers canned rows so the agent loop runs offline), an HTTP operation on an
-``api`` asset, or a tool on an MCP server.
+The worker never holds connection details. A tool asset carries a binding: a gateway route,
+an HTTP operation on an ``api`` asset, or a tool on an MCP server.
+
+Gateway routes answered here: the sample ERP (``wigtn_agents.sample_erp``, the shipped catalog's
+tools), ``delegate-run`` (records the hand-off, the router's tool), and canned rows for the small
+"records" catalog the runtime tests use (``tests/fixtures/catalog``).
 """
 
 from __future__ import annotations
@@ -31,6 +34,9 @@ _JSON_TYPES: dict[str, type] = {
 RouteHandler = Callable[[Optional[str], dict[str, Any]], dict[str, Any]]
 
 
+# -- tests/fixtures/catalog ("records" example domain) ----------------------------------------
+
+
 def _record_read(operation: Optional[str], payload: dict[str, Any]) -> dict[str, Any]:
     rows = [
         {"record": "R-0001", "category": "A", "amount": 1_250_000, "status": "open"},
@@ -53,18 +59,30 @@ def _record_write(operation: Optional[str], payload: dict[str, Any]) -> dict[str
     return {"route": "record-write", "operation": operation, "document_no": "R-0077"}
 
 
-DEFAULT_ROUTES: dict[str, RouteHandler] = {
+def _delegate_run(operation: Optional[str], payload: dict[str, Any]) -> dict[str, Any]:
+    """The router's hand-off. Starting the other agent's run is the caller's job; this records the choice."""
+    return {"route": "delegate-run", "agent_id": payload.get("agent_id"), "status": "accepted"}
+
+
+FIXTURE_ROUTES: dict[str, RouteHandler] = {
     "record-read": _record_read,
     "db-read": _view_read,
     "record-write": _record_write,
 }
 
 
+def default_routes() -> dict[str, RouteHandler]:
+    """Every route a new gateway client answers (the sample ERP is shared by the process)."""
+    from wigtn_agents.sample_erp import erp_routes
+
+    return {**FIXTURE_ROUTES, "delegate-run": _delegate_run, **erp_routes()}
+
+
 class ToolGatewayClient:
     """Routes tool calls by gateway route name. Credentials would live here, never in the worker."""
 
     def __init__(self, routes: Optional[dict[str, RouteHandler]] = None) -> None:
-        self._routes: dict[str, RouteHandler] = dict(DEFAULT_ROUTES)
+        self._routes: dict[str, RouteHandler] = default_routes()
         if routes:
             self._routes.update(routes)
         self.calls: list[dict[str, Any]] = []

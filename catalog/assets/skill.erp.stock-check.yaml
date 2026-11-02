@@ -1,0 +1,25 @@
+kind: skill
+name: erp/stock-check
+version: 1
+status: active
+owner: agents
+description: 재고 보충 필요 점검 (읽기 전용)
+inputs: {type: object, properties: {material: {type: string}}}
+outputs: {type: object, properties: {below_reorder: {type: array}}}
+permission_scope: [read:inventory, read:purchasing]
+mutable_by_sel: [body.instruction, body.default_plan]
+provenance: {created_by: human}
+eval_cases:
+  - id: sc-001
+    input: {question: "재주문점 아래로 떨어진 자재 있어?"}
+    expected: {contains: ["M-1001", "M-1003"]}
+    judge: contains
+body:
+  trigger: "재고 점검 · 재주문점 · 결품 위험 · 보충 수량"
+  instruction: |
+    1. erp-stock-read로 자재별 가용 재고(보유 - 예약 + 미입고 발주)와 재주문점을 본다.
+    2. 재주문점 아래인 자재를 골라 가용 재고, 재주문점, 제안 수량, 제안 금액, 리드타임을 표로 정리한다.
+    3. 미입고 발주가 있으면 erp-po-read로 발주 번호와 납기를 확인해 함께 적는다.
+    4. 보충이 필요하면 구매요청을 제안한다. 이 단계에서는 요청을 만들지 않는다.
+  tools: [tool://erp-period-status@active, tool://erp-stock-read@active, tool://erp-po-read@active]
+  default_plan: [tool://erp-stock-read@active]

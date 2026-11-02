@@ -6,7 +6,8 @@ to every target in ``OTEL_TARGETS``:
 
 * ``LANGFUSE`` and ``PHOENIX`` are Aegra's own targets (``LANGFUSE_*``, ``PHOENIX_*`` variables);
 * ``LANGSMITH`` is added here and sends the same spans to LangSmith's OTLP endpoint
-  (``LANGSMITH_API_KEY``, optional ``LANGSMITH_PROJECT`` and ``LANGSMITH_OTEL_ENDPOINT``).
+  (``LANGSMITH_API_KEY``, optional ``LANGSMITH_PROJECT``; the endpoint is ``LANGSMITH_OTEL_ENDPOINT``,
+  else ``LANGSMITH_ENDPOINT`` + ``/otel/v1/traces`` for a regional or self-hosted LangSmith).
 
 LangSmith's own LangChain tracer (``LANGSMITH_TRACING=true``) is refused while any OTLP target is
 on: LangChain wraps middleware ``wrap_*`` hooks in LangSmith ``@traceable`` runs, which the
@@ -66,7 +67,23 @@ def check_config(environ: Optional[Mapping[str, str]] = None) -> list[str]:
             "LANGSMITH_TRACING과 OTEL_TARGETS를 함께 켜면 Langfuse·Phoenix에서 run 하나가 trace 여러 개로 갈라집니다. "
             f"LANGSMITH_TRACING을 끄고 {TARGETS_ENV}에 {LANGSMITH}를 넣으세요"
         )
+    phoenix = env.get("PHOENIX_COLLECTOR_ENDPOINT", "").strip()
+    if "PHOENIX" in targets and phoenix and not phoenix.rstrip("/").endswith("/v1/traces"):
+        # Aegra posts to this URL as given; a project URL without the OTLP path answers 404/405.
+        raise TracingConfigError(
+            f"PHOENIX_COLLECTOR_ENDPOINT는 OTLP 경로까지 적어야 합니다: {phoenix.rstrip('/')}/v1/traces"
+        )
     return targets
+
+
+def langsmith_endpoint(environ: Optional[Mapping[str, str]] = None) -> str:
+    """LangSmith's OTLP traces URL: explicit, derived from ``LANGSMITH_ENDPOINT``, or the default."""
+    env = os.environ if environ is None else environ
+    explicit = env.get("LANGSMITH_OTEL_ENDPOINT", "").strip()
+    if explicit:
+        return explicit
+    api = env.get("LANGSMITH_ENDPOINT", "").strip().rstrip("/")
+    return f"{api}/otel/v1/traces" if api else LANGSMITH_OTEL_ENDPOINT
 
 
 def langsmith_exporter(environ: Optional[Mapping[str, str]] = None) -> Optional[SpanExporter]:
@@ -82,8 +99,7 @@ def langsmith_exporter(environ: Optional[Mapping[str, str]] = None) -> Optional[
     project = env.get("LANGSMITH_PROJECT", "").strip()
     if project:
         headers["Langsmith-Project"] = project
-    endpoint = env.get("LANGSMITH_OTEL_ENDPOINT", "").strip() or LANGSMITH_OTEL_ENDPOINT
-    return OTLPSpanExporter(endpoint=endpoint, headers=headers)
+    return OTLPSpanExporter(endpoint=langsmith_endpoint(env), headers=headers)
 
 
 def _aegra_target(name: str) -> Any:

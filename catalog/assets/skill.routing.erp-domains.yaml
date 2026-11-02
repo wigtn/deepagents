@@ -1,0 +1,36 @@
+kind: skill
+name: routing/erp-domains
+version: 1
+status: active
+owner: platform
+description: 요청을 ERP 업무 에이전트로 나누는 라우팅 절차
+inputs: {type: object, properties: {question: {type: string}}, required: [question]}
+outputs: {type: object, properties: {agent_id: {type: string}}}
+permission_scope: [invoke:agent]
+mutable_by_sel: [body.instruction, body.routes]
+provenance: {created_by: human}
+eval_cases:
+  - id: rt-001
+    input: {question: "중복 송장 같은 거 있으면 지급 막아줘"}
+    expected: {contains: ["ap-clerk"]}
+    judge: contains
+  - id: rt-002
+    input: {question: "10월 마감 준비 상태 점검해줘"}
+    expected: {contains: ["close-accountant"]}
+    judge: contains
+  - id: rt-003
+    input: {question: "볼트 재고 얼마나 남았어?"}
+    expected: {contains: ["erp-assistant"]}
+    judge: contains
+body:
+  trigger: "모든 진입 질의 (agent_id 미지정)"
+  instruction: |
+    질의의 의도를 아래 routes에서 고른다. 데이터를 바꾸는 요청이나 점검 후 처리까지 맡기는 요청은 담당 에이전트로,
+    값 하나를 묻는 조회 질문은 erp-assistant로 보낸다. 판단이 어려우면 사용자에게 선택지를 제시한다.
+  routes:
+    - {intent: "매입송장 매칭 · 중복 송장 · 지급 보류", agent_id: ap-clerk}
+    - {intent: "재고 보충 · 구매요청", agent_id: inventory-planner}
+    - {intent: "월마감 점검 · 전표 전기 · 감가상각 · 미지급비용", agent_id: close-accountant}
+    - {intent: "구매오더 · 송장 · 재고 · 채권 · 시산표 조회와 질문", agent_id: erp-assistant}
+  tools: [tool://delegate-run@active]
+  default_plan: [tool://delegate-run@active]

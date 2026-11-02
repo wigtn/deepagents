@@ -1,0 +1,20 @@
+apiVersion: wigtn.agents/v1
+kind: agent
+metadata:
+  name: close-accountant
+  version: 1
+  owner: agents
+  worker_class: background
+  description: 결산 담당 · 월마감 점검 · 마감 전표 전기 (실행 승인 포함)
+model: {ref: models/default, temperature: 0.0, max_tokens: 4096}
+harness_preset: strict
+skills: [skill://erp/close-check@active, skill://erp/journal-post@active]
+prompts: {system: prompt://erp/system@active}
+flow: {template: approval-gated}
+interrupts: {approve_before: [tool://erp-journal-post@active]}
+permissions:
+  allow_tools: [tool://erp-period-status@active, tool://erp-close-checklist@active, tool://erp-trial-balance@active, tool://erp-journal-post@active]
+  data_scope: [erp:read, erp:ledger-write]
+subagents: [erp-assistant]
+memory: true
+sel: {mutable_by_sel: [skills]}

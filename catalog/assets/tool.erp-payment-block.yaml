@@ -1,0 +1,22 @@
+kind: tool
+name: erp-payment-block
+version: 1
+status: active
+owner: platform
+description: 매입송장 지급 보류 설정 · 해제 (쓰기 · 실행 승인 필수)
+permission_scope: [write:payables]
+mutable_by_sel: []
+provenance: {created_by: human}
+body:
+  input_schema:
+    type: object
+    properties:
+      company: {type: string, description: "회사 코드. 실행 범위에서 시스템이 채운다"}
+      invoice: {type: string, description: "송장 번호"}
+      block: {type: boolean, description: "true면 보류, false면 해제", default: true}
+      reason: {type: string, description: "보류 사유"}
+    required: [invoice, reason]
+  output_schema: {type: object, properties: {payment_block: {type: object}}}
+  side_effect: write
+  idempotent: true
+  binding: {gateway_route: erp-payment-block, api: api://erp-api@1, operation: "POST /vendor-invoices/{invoice}/payment-block"}

@@ -1,0 +1,14 @@
+kind: api
+name: erp-api
+version: 1
+status: active
+owner: platform
+description: ERP HTTP API 바인딩 (참조만). 기본 실행은 같은 이름의 게이트웨이 라우트(sample_erp)가 답한다
+permission_scope: [read:purchasing, read:payables, read:inventory, read:receivables, read:ledger, write:payables, write:purchasing, write:ledger]
+mutable_by_sel: []
+provenance: {created_by: human}
+body:
+  openapi_ref: "specs/erp-api.yaml"
+  base_url_ref: "secret://erp/base-url"
+  credential_ref: "secret://erp/service-account"
+  rate_limit: {requests_per_minute: 600}

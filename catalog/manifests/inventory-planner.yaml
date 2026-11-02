@@ -1,0 +1,18 @@
+apiVersion: wigtn.agents/v1
+kind: agent
+metadata:
+  name: inventory-planner
+  version: 1
+  owner: agents
+  worker_class: background
+  description: 자재 담당 · 재주문점 점검 · 보충 구매요청 (실행 승인 포함)
+model: {ref: models/default, temperature: 0.1, max_tokens: 4096}
+harness_preset: standard
+skills: [skill://erp/stock-check@active, skill://erp/requisition@active]
+prompts: {system: prompt://erp/system@active}
+flow: {template: approval-gated}
+interrupts: {approve_before: [tool://erp-requisition-create@active]}
+permissions:
+  allow_tools: [tool://erp-period-status@active, tool://erp-stock-read@active, tool://erp-po-read@active, tool://erp-requisition-create@active]
+  data_scope: [erp:read, erp:purchasing-write]
+sel: {mutable_by_sel: [skills]}
