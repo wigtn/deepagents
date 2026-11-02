@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any, Optional, cast
 
+import yaml
 from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
 from langchain_core.messages import SystemMessage
 from langgraph.runtime import Runtime
@@ -51,12 +52,17 @@ def compose_prompt(manifest: AnyManifest, catalog: Catalog, pinned: dict[str, st
             catalog.resolve(pinned.get(t, t)).tool_name()
             for t in body.default_plan  # type: ignore[attr-defined]
         )
-        parts.append(
+        section = (
             f"## 스킬 · {skill.name} (v{skill.version})\n"
             f"사용 시점: {body.trigger}\n"  # type: ignore[attr-defined]
             f"절차:\n{body.instruction.strip()}\n"  # type: ignore[attr-defined]
             f"도구 기본 순서: {plan or '없음'}"
         )
+        # Fields a skill adds to its body (a routing table, thresholds) are part of the procedure.
+        extra = {k: v for k, v in (body.model_extra or {}).items() if v is not None}
+        if extra:
+            section += "\n참고 자료:\n" + yaml.safe_dump(extra, allow_unicode=True, sort_keys=False).strip()
+        parts.append(section)
     return "\n\n".join(parts)
 
 
