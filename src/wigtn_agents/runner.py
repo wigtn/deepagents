@@ -66,11 +66,52 @@ async def run_local(
     sink: Optional[EventSink] = None,
     approve: bool = False,
 ) -> LocalResult:
-    """Run an agent (``payload`` = user text) or an action (``payload`` = input dict) once."""
-    from wigtn_agents.assembly import assemble, extra_middleware_names, resolve_run_model
+    """Run an agent (``payload`` = user text) or an action (``payload`` = input dict) once.
+
+    Spans of the run carry the same session, user and metadata attributes as a server run, and
+    the event rows carry the same ``run_id``, so a trace and its rows can be matched.
+    """
+    from wigtn_agents.tracing import run_attributes
 
     thread_id = f"local-{uuid.uuid4().hex[:12]}"
-    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
+    run_id = str(uuid.uuid4())
+    meta = {**trace_metadata(agent_id, ctx), "run_id": run_id}
+    with run_attributes(thread_id=thread_id, principal=ctx.get("principal"), name=agent_id, metadata=meta):
+        return await _run(
+            agent_id, payload, ctx, thread_id, run_id, catalog=catalog, model=model, sink=sink, approve=approve
+        )
+
+
+def trace_metadata(agent_id: str, ctx: RunContext) -> dict[str, Any]:
+    """Per-run trace metadata: which agent, batch, session type and model alias."""
+    values = {
+        "agent_id": agent_id,
+        "batch_id": ctx.get("batch_id"),
+        "session_type": ctx.get("session_type"),
+        "model_alias": ctx.get("model"),
+    }
+    return {k: v for k, v in values.items() if isinstance(v, (str, int, float, bool))}
+
+
+async def _run(
+    agent_id: str,
+    payload: Any,
+    ctx: RunContext,
+    thread_id: str,
+    run_id: str,
+    *,
+    catalog: Catalog,
+    model: Optional[BaseChatModel],
+    sink: Optional[EventSink],
+    approve: bool,
+) -> LocalResult:
+    from wigtn_agents.assembly import assemble, extra_middleware_names, resolve_run_model
+
+    # LangChain run metadata becomes the OpenInference ``metadata`` attribute Phoenix and LangSmith read.
+    config: RunnableConfig = {
+        "configurable": {"thread_id": thread_id, "run_id": run_id},
+        "metadata": {**trace_metadata(agent_id, ctx), "run_id": run_id, "thread_id": thread_id},
+    }
     runtime = {"checkpointer": InMemorySaver(), "store": InMemoryStore()}
 
     if agent_id in catalog.action_ids():

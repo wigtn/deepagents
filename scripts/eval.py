@@ -125,5 +125,17 @@ async def main() -> int:
     return 1 if counts["failed"] else 0
 
 
+def traced_main() -> int:
+    """``main`` with in-process tracing to the targets in ``OTEL_TARGETS``."""
+    from wigtn_agents.tracing import start_local_tracing, stop_local_tracing
+
+    load_dotenv(ROOT / ".env")
+    start_local_tracing()
+    try:
+        return asyncio.run(main())
+    finally:
+        stop_local_tracing()
+
+
 if __name__ == "__main__":
-    sys.exit(asyncio.run(main()))
+    sys.exit(traced_main())

@@ -30,8 +30,13 @@ from wigtn_agents.assembly import (
 from wigtn_agents.assets.catalog import Catalog
 from wigtn_agents.context import Graph, RunContext, default_context
 from wigtn_agents.paths import CATALOG_DIR_ENV, catalog_dir
+from wigtn_agents.tracing import ensure_server_targets
 
 __all__ = ["CATALOG_DIR_ENV", "action", "build_run_context", "catalog_dir", "graph", "load_catalog"]
+# Tracing settings are checked once when the runtime imports this module; the LangSmith OTLP
+# target joins Aegra's Langfuse and Phoenix targets. Nothing is sent from here.
+ensure_server_targets()
+
 _catalog_lock = threading.Lock()
 _catalog_cache: dict[str, Any] = {"stamp": None, "catalog": None}
 
