@@ -68,6 +68,10 @@ PYTHONPATH=src uv run python scripts/run.py records-writer "8월 기록 반영" 
 ```
 
 Eval cases carried by the assets: `PYTHONPATH=src uv run python scripts/eval.py records-guide --model <alias>`.
+A case is graded by `contains` (expected strings appear), `exact` (equal text) or `llm` (a judge model grades the
+answer against the case's rubric: criteria with weights and a `pass_score`; the score is computed from the per-criterion
+calls, not asked of the judge). The judge (`--judge-model`, or `judge` in `catalog/models.yaml`) must be another
+provider model than the backbone; the eval stops before the first run otherwise. `--no-llm` skips `llm` cases.
 
 Offline tests (no model calls): `uv run pytest -q`. Lint: `uv run ruff check . && uv run ruff format --check .`.
 Types: `uv run mypy`.
@@ -171,8 +175,8 @@ and `run_id` metadata that Aegra adds.
 
 ## Status
 
-Not yet done: the open-weight endpoints and prices, one run as one trace in Langfuse and Phoenix, and an `llm` judge
-for eval cases.
+Not yet done: the open-weight endpoints and prices, a registered judge model, and one run as one trace in Langfuse
+and Phoenix.
 
 ## License
 

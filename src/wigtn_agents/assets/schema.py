@@ -99,13 +99,57 @@ class Provenance(BaseModel):
     source_version: Optional[int] = None
 
 
+class Criterion(BaseModel):
+    """루브릭 기준 하나. 채점 모델은 기준마다 충족 여부만 답하고, 점수는 코드가 계산한다."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    description: str
+    weight: float = Field(default=1.0, gt=0)
+
+
+class Rubric(BaseModel):
+    """``llm`` 채점의 기준 목록과 통과 점수(충족한 기준 가중치 합 / 전체 가중치 합)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    criteria: list[Criterion] = Field(min_length=1)
+    pass_score: float = Field(default=0.7, gt=0, le=1)
+
+    @model_validator(mode="after")
+    def _unique_ids(self) -> Rubric:
+        ids = [c.id for c in self.criteria]
+        if len(ids) != len(set(ids)):
+            raise ValueError(f"루브릭 기준 id가 겹칩니다: {ids}")
+        return self
+
+
 class EvalCase(BaseModel):
-    """자산이 자기 안에 들고 다니는 테스트 케이스."""
+    """자산이 자기 안에 들고 다니는 테스트 케이스.
+
+    ``contains``: ``expected.contains``의 문자열이 모두 답에 있다. ``exact``: 답이
+    ``expected.text``와 같다. ``llm``: 평가 대상과 다른 채점 모델이 ``rubric``으로 채점한다
+    (``expected.reference``는 선택, 채점 모델에게 참고 답으로 보인다).
+    """
 
     id: str
     input: dict[str, Any]
-    expected: dict[str, Any]
+    expected: dict[str, Any] = Field(default_factory=dict)
     judge: Literal["exact", "contains", "llm"] = "contains"
+    rubric: Optional[Rubric] = None
+
+    @model_validator(mode="after")
+    def _judge_inputs(self) -> EvalCase:
+        if self.judge == "contains" and not self.expected.get("contains"):
+            raise ValueError(f"{self.id}: contains 채점은 expected.contains가 필요합니다")
+        if self.judge == "exact" and "text" not in self.expected:
+            raise ValueError(f"{self.id}: exact 채점은 expected.text가 필요합니다")
+        if self.judge == "llm" and self.rubric is None:
+            raise ValueError(f"{self.id}: llm 채점은 rubric이 필요합니다")
+        if self.judge != "llm" and self.rubric is not None:
+            raise ValueError(f"{self.id}: rubric은 llm 채점에서만 씁니다")
+        return self
 
 
 class PromptBody(BaseModel):

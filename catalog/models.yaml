@@ -10,6 +10,10 @@
 # accepts    manifest parameters passed to the provider; others are dropped, not guessed
 # defaults   provider parameters set when the manifest does not set them
 default: models/default
+# Judge of `llm` eval cases (scripts/eval.py --judge-model overrides it). It must be another model
+# than the backbone under evaluation; an eval with the same provider model as judge is refused.
+# Unset until a second priced model is registered.
+# judge: models/<alias>
 
 models:
   models/default:
