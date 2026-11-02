@@ -152,11 +152,13 @@ action carry `step: gather`), `run.error` (error class only) and `run.end` (`ok`
 `cancelled`).
 
 Langfuse and Phoenix receive spans through Aegra's OpenTelemetry fan-out (`OTEL_TARGETS`). LangSmith uses LangChain's
-own tracer (`LANGSMITH_TRACING`). The three tools do not record the same shape (checked 2026-11-01). LangSmith keeps
-one run as one trace, including the middleware `awrap_model_call` and `awrap_tool_call` hooks as spans. The
-OpenInference records sent to Langfuse and Phoenix have no span for those hooks, so model and tool calls made inside
-them lose their parent and become separate traces (one run, four traces). Each piece still carries the `thread_id`
-and `run_id` metadata that Aegra adds.
+own tracer (`LANGSMITH_TRACING`). With LangSmith tracing off, Langfuse and Phoenix get one run as one trace. With it
+on, one run splits into several traces there (checked with openinference-instrumentation-langchain 0.1.76 and 0.1.81):
+LangChain wraps the middleware `wrap_model_call` / `wrap_tool_call` hooks in LangSmith `@traceable`, that run becomes
+the parent of the model and tool calls inside the hook, and the OpenInference tracer, which never sees it, starts a
+new trace for each of them. LangSmith itself keeps one trace. Until the instrumentor resolves such a parent, do not
+turn on both at once for a run you read in Langfuse or Phoenix; each piece still carries the `thread_id` and `run_id`
+metadata that Aegra adds.
 
 ## Layout
 
@@ -175,8 +177,8 @@ and `run_id` metadata that Aegra adds.
 
 ## Status
 
-Not yet done: the open-weight endpoints and prices, a registered judge model, and one run as one trace in Langfuse
-and Phoenix.
+Not yet done: the open-weight endpoints and prices, a registered judge model, and one trace per run in Langfuse and
+Phoenix while LangSmith tracing is also on (an instrumentor fix).
 
 ## License
 
